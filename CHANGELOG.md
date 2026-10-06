@@ -5924,3 +5924,16 @@ First skeleton. Not functional end-to-end yet.
 [0.3.0a1]: https://github.com/ffroliva/gflow-cli/releases/tag/v0.3.0a1
 [0.2.0a1]: https://github.com/ffroliva/gflow-cli/releases/tag/v0.2.0a1
 [0.1.0]: https://github.com/ffroliva/gflow-cli/releases/tag/v0.1.0
+### AutoFlow source preview
+
+- Sequential supplied-image video batches through CLI and native MCP, with dry-run,
+  count-one shots, a shared browser/project, durable resume and no uncertain resubmission.
+- Existing clip recovery accepts an explicit project/profile when the local catalog
+  is missing; completed batch files survive catalog failures and reconcile on resume.
+- Migrated composer null-step video parsing, empty mention-picker protection and
+  locale-independent duration selection, including Omni Flash 10-second i2v controls.
+- macOS generation-only minimized Chrome windows; login remains visible. This is
+  headed browsing, not headless or an anti-detection guarantee.
+- Fork installation/MCP docs and an upstream-only registry/PyPI release guard.
+
+The fork is a source preview, not a stable release. See [verification limits](docs/AUTOFLOW.md).

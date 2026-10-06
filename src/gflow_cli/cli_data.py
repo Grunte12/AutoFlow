@@ -348,8 +348,23 @@ async def _run_media(*, profile: str | None, media_id: str) -> None:
     default=None,
     help="Scope the lookup to a specific profile. Default: search all profiles.",
 )
+@click.option(
+    "--project",
+    "project_id",
+    default=None,
+    help=(
+        "Flow project UUID for an already-generated clip missing from the local catalog. "
+        "That recovery also requires --profile."
+    ),
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit a JSON summary instead of text.")
-def download(media_id: str, out_dir: Path | None, profile: str | None, as_json: bool) -> None:
+def download(
+    media_id: str,
+    out_dir: Path | None,
+    profile: str | None,
+    project_id: str | None,
+    as_json: bool,
+) -> None:
     """Fetch an already-generated video from Flow by its media ID.
 
     For a generation that finished and was billed but whose download failed — the
@@ -363,19 +378,34 @@ def download(media_id: str, out_dir: Path | None, profile: str | None, as_json: 
 
     Video only. The signed URL comes from a record Flow emits when a clip's own route
     loads; an image's route does not carry one, so an image media ID is refused
-    immediately with exit 11 rather than opening a browser. See issue #877.
+    immediately with exit 11 rather than opening a browser. See issue #877. If the media
+    ID is absent from the local catalog, pass both --project and --profile; a minimal
+    catalog record is written only after Flow verifies the recovered clip.
     """
     run_with_handlers(
-        lambda: _run_download(media_id=media_id, out_dir=out_dir, profile=profile, as_json=as_json),
+        lambda: _run_download(
+            media_id=media_id,
+            out_dir=out_dir,
+            profile=profile,
+            project_id=project_id,
+            as_json=as_json,
+        ),
         cli_command="data download",
         as_json=as_json,
     )
 
 
 async def _run_download(
-    *, media_id: str, out_dir: Path | None, profile: str | None, as_json: bool
+    *,
+    media_id: str,
+    out_dir: Path | None,
+    profile: str | None,
+    project_id: str | None,
+    as_json: bool,
 ) -> None:
-    result = await download_media(media_id=media_id, profile=profile, out_dir=out_dir)
+    result = await download_media(
+        media_id=media_id, profile=profile, project_id=project_id, out_dir=out_dir
+    )
     if as_json:
         click.echo(
             json.dumps(

@@ -1178,6 +1178,11 @@ class VideoGenerationMixin:
                 else "ui_automation_video.poll_stall_nudge"
             )
             log.warning(event, media_name=media_name, status_responses_seen=seen_count)
+            from gflow_cli.background_browser import is_background_page
+
+            if is_background_page(page):
+                log.warning("ui_automation_video.background_poll_stalled", foreground_nudge=False)
+                return seen_count, last_progress, True
             try:
                 await page.bring_to_front()
             except Exception as e:

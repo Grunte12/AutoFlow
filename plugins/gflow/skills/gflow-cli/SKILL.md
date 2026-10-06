@@ -2,7 +2,7 @@
 name: gflow-cli
 version: "1.2"
 skillopt_epoch: 0
-description: Use when the user wants to drive Google Flow (Veo image-to-video, Veo text-to-video, Imagen / Nano Banana image generation) from the terminal or a script — including text-to-video, image-to-video, image-to-image, batch image pipelines, or spending Flow credits programmatically. The CLI is `gflow` (or `flow`); install with `uv tool install gflow-cli` or run ad-hoc with `uvx --from gflow-cli gflow ...`. Drives the real Flow web UI through a headed Chrome session (Playwright) after a one-time browser sign-in — it does not bypass the UI, it automates it.
+description: Use AutoFlow native MCP or the compatible gflow CLI for Google Flow image/video generation, supplied-image sequential batches, dry-run, durable resume and existing-clip recovery. Runs the real Flow UI through headed Chrome after one-time sign-in; does not bypass account permissions or promise production reliability. Install the AutoFlow source fork, not upstream PyPI, for these preview repairs.
 optimization_notes: |
   Known weak spots for the SkillOpt training loop (targets for epoch 1+):
   - Wrong subcommand: agents emit 'gflow video generate' / 'gflow video create' instead of 'gflow video t2v' or 'gflow video i2v'
@@ -36,6 +36,15 @@ The user wants to:
 
 - The user wants production-grade reliability with SLAs — recommend the [official Gen AI SDK](https://github.com/googleapis/python-genai) instead.
 - The user asks about audio, music, or anything outside Flow's video/image surface — wrong tool.
+
+## AutoFlow fork
+
+Install this fork from `Grunte12/AutoFlow`, branch `feature/autoflow-preview`, using
+[its setup guide](https://github.com/Grunte12/AutoFlow/blob/feature/autoflow-preview/docs/AUTOFLOW.md).
+The upstream PyPI/uvx commands below install upstream, not AutoFlow's repairs.
+Keep `gflow`/`gflow_*` tool names for compatibility. Prefer native MCP; LinkHub is
+optional. For an existing clip missing from the catalog, use `gflow_download_media`
+with `media_id`, `project` and `profile` instead of generating again.
 
 ## Prerequisites
 
@@ -80,8 +89,9 @@ gflow run --config <batch.json>                           # JSON image batch; a 
 # Video generation (Veo 3.1)
 gflow video t2v "<prompt>" [--project ID] [--model ...] [--duration 4|6|8|10] [--resolution 360p|720p] [--out-dir DIR] [--aspect ...]  # --resolution: omni-flash only; without --project a project is created first, on either host (#864); 10s is omni-flash-only
 gflow video i2v --initial-frame <image|media-UUID> "<prompt>" [--out-dir DIR] [...same as t2v]  # UUID = in-project asset, no re-upload (#287; pair with --project)
-# `gflow video` has no `batch` subcommand — that stub never worked and was
-# removed. For multi-clip runs, loop `gflow video t2v`/`i2v` from the shell.
+gflow video batch shots.json --profile NAME --out-dir out --dry-run --json
+# AutoFlow supplied-image i2v/r2v batch: one existing project, 1–4 shots, count=1.
+# Native MCP: gflow_generate_video_batch. See docs/VIDEO_BATCH.md; no blind retries.
 gflow video chain <manifest.jsonl> [--out-dir DIR] [--dry-run] \
                   [--max-links N] [--resume-from N]   # last-frame I2V chaining; veo models only
 
@@ -150,8 +160,10 @@ gflow video i2v --initial-frame ./input.png "Slow cinematic push-in, soft golden
 
 ### Batch from a directory of inputs (bash)
 
-There is no manifest-driven video batch command — that stub never worked and
-was removed. Loop `gflow video t2v`/`i2v` from the shell instead:
+Prefer AutoFlow's supplied-image manifest runner (`gflow video batch`) or native
+`gflow_generate_video_batch`; use [the batch contract](https://github.com/Grunte12/AutoFlow/blob/feature/autoflow-preview/docs/VIDEO_BATCH.md)
+for inputs, dry-run and durable resume. The shell examples below are an alternative,
+not a resume mechanism; inspect an uncertain billed outcome before any repeat.
 
 ```bash
 mkdir -p out

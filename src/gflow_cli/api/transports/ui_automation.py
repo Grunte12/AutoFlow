@@ -1090,8 +1090,9 @@ class UiAutomationTransport(VideoGenerationMixin):
             # #477: refuse a bundled-Chromium open of a profile last written by
             # a newer Chromium — downgrade cleanup can shred the session store.
             ensure_profile_engine_compatible(profile_dir, channel)
-            ctx = await pw.chromium.launch_persistent_context(
-                str(profile_dir),
+            settings = get_settings()
+            launch_kwargs = dict(
+                user_data_dir=str(profile_dir),
                 headless=False,
                 viewport=cast("ViewportSize", _VIEWPORT),
                 locale=locale_env,
@@ -1100,9 +1101,15 @@ class UiAutomationTransport(VideoGenerationMixin):
                     "--disable-blink-features=AutomationControlled",
                     "--password-store=basic",
                     "--disable-dev-shm-usage",
-                    *window_position_args(get_settings().browser_window_position),
+                    *window_position_args(settings.browser_window_position),
                 ],
             )
+            if settings.browser_background:
+                from gflow_cli.background_browser import background_launch_kwargs
+
+                launch_kwargs = background_launch_kwargs(launch_kwargs, profile_dir)
+            user_data_dir = launch_kwargs.pop("user_data_dir")
+            ctx = await pw.chromium.launch_persistent_context(user_data_dir, **launch_kwargs)
             # Hide the automation flag so reCAPTCHA Enterprise doesn't score
             # the session as a bot — navigator.webdriver=true causes low-score
             # tokens and HTTP 403 on batchGenerateImages.
@@ -1111,7 +1118,12 @@ class UiAutomationTransport(VideoGenerationMixin):
             )
             self._pw_cm = pw_cm
             self._ctx = ctx
-            page = cast("Page", ctx.pages[0] if ctx.pages else await ctx.new_page())
+            if settings.browser_background:
+                from gflow_cli.background_browser import new_background_page
+
+                page = await new_background_page(ctx)
+            else:
+                page = cast("Page", ctx.pages[0] if ctx.pages else await ctx.new_page())
             self._page = page
             try:
                 await page.goto(FLOW_URL, wait_until="networkidle", timeout=45_000)

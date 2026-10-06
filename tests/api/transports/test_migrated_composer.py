@@ -327,6 +327,16 @@ class FakeLocator:
     async def all_text_contents(self) -> list[str]:
         return [str(i) for i in self.items]
 
+    async def evaluate_all(self, _script: str) -> list[list[int | None]]:
+        assert self.kind == "group"
+        return [
+            [
+                int(m[1]) if (m := re.fullmatch(r"\s*(\d+)\D*", r.text)) else None
+                for r in self.page.dom.groups[g]
+            ]
+            for g in self.items
+        ]
+
     async def wait_for(self, *, state: str = "visible", timeout: float = 0) -> None:
         await asyncio.sleep(0)
         present = bool(self.items) and self._visible_now
@@ -679,6 +689,8 @@ class FakePage:
                 return FakeLocator(self, "group", [])  # a menu pane has no option groups
             return FakeLocator(self, "group", list(dom.groups) if dom.pane_open else [])
         if css == "[role='radio']":
+            if scope is not None and scope.kind == "group":
+                return FakeLocator(self, "radio", [r for g in scope.items for r in dom.groups[g]])
             if scope is not None and scope.items and scope.items[0] != "pane":
                 return FakeLocator(self, "radio", [])
             radios = [r for g in dom.groups.values() for r in g] if dom.pane_open else []
@@ -957,6 +969,54 @@ async def test_axis_left_at_default_when_not_requested() -> None:
     del page.dom.groups["duration"]  # no control, but nothing requested either
     await MigratedComposer().apply_video_settings(page, _t2v(duration=None))
     assert page.dom.groups["count"][0].checked
+
+
+@pytest.mark.parametrize("suffix", [" วินาที", "s", " 秒", " Sekunden"])
+async def test_duration_scalar_selection_does_not_depend_on_translated_unit(suffix: str) -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakePage()
+    for radio, value in zip(page.dom.groups["duration"], (4, 6, 8, 10), strict=True):
+        radio.label = f"{value}{suffix}"
+    await MigratedComposer().apply_video_settings(page, _t2v(duration=10))
+    assert page.dom.groups["duration"][3].checked
+    assert page.dom.groups["count"][0].checked
+    assert page.dom.submit_clicked == 0
+
+
+async def test_duplicate_duration_domains_fail_without_guessing() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakePage()
+    page.dom.groups["other-duration"] = [Radio("", f"{n}s") for n in (4, 6, 8, 10)]
+    with pytest.raises(UiSelectorDriftError, match="ambiguous"):
+        await MigratedComposer().apply_video_settings(page, _t2v(duration=10))
+    assert not page.dom.groups["duration"][3].checked
+    assert page.dom.submit_clicked == 0
+
+
+@pytest.mark.parametrize("values", [(4, 6, 8), (4, 6, 10), (4, 6, 8, 10, 10)])
+async def test_missing_or_malformed_duration_domain_never_substitutes(
+    values: tuple[int, ...],
+) -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakePage()
+    page.dom.groups["duration"] = [Radio("", f"{n} วินาที") for n in values]
+    with pytest.raises(ConfigurationError, match="duration"):
+        await MigratedComposer().apply_video_settings(page, _t2v(duration=10))
+    assert not any(r.checked for r in page.dom.groups["duration"])
+    assert page.dom.submit_clicked == 0
+
+
+async def test_extra_digits_in_duration_labels_fail_closed() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakePage()
+    page.dom.groups["duration"] = [Radio("", f"{n} seconds 720p") for n in (4, 6, 8, 10)]
+    with pytest.raises(ConfigurationError, match="duration"):
+        await MigratedComposer().apply_video_settings(page, _t2v(duration=10))
+    assert page.dom.submit_clicked == 0
 
 
 def _r2v_request(**kw: Any) -> GenerateVideoRequest:
@@ -1285,6 +1345,36 @@ async def test_submit_observes_submit_then_poll_then_result() -> None:
     assert started[0].project_id == PROJ
     # #898: record slot 0 is Flow's workflow id (wire spike 2026-09-05); carry it by name.
     assert started[0].workflow_id == rec.workflow_id
+    assert page.dom.submit_clicked == 1
+
+
+@pytest.mark.parametrize("rpc", ["eb1hJf", "nprQif", "MZZa6b"])
+async def test_submit_observer_accepts_null_step_without_clicking_again(rpc: str) -> None:
+    """Oct6 measured null-step video shape through the real observer boundary."""
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    def changed(status: int, url: str | None = None) -> list[Any]:
+        record = _record(status, url)
+        record[3] = None
+        record[7].append([record[0]])
+        return record
+
+    page = FakePage()
+    page.dom.prompt = "a crane"
+    page.scripted_responses = [
+        (_batch_url(rpc), _frame(rpc, [None, 552, [["metadata"]], [[changed(6)]]])),
+        (_batch_url("jwpduf"), _frame("jwpduf", [None, 552, [[changed(2)]]])),
+        (_batch_url("as29s"), _frame("as29s", changed(3, VIDEO_URL))),
+    ]
+    started: list[Any] = []
+    record = await MigratedComposer().submit_and_observe(
+        page,
+        poll_timeout_s=2,
+        on_started=started.append,
+        project_id="22222222-2222-4222-8222-222222222222",
+    )
+    assert record.is_done and record.video_url == VIDEO_URL
+    assert len(started) == 1 and started[0].media_id == MEDIA
     assert page.dom.submit_clicked == 1
 
 

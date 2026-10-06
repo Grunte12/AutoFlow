@@ -70,7 +70,9 @@ nav:
       - Account safety: ACCOUNT_SAFETY.md
   - User Guide: USER_GUIDE.md
   - Command Reference: USAGE.md
+  - AutoFlow Preview: AUTOFLOW.md
   - Features:
+      - Supplied-image Video Batches: VIDEO_BATCH.md
       - Characters: CHARACTER.md
       - Movie Generation: MOVIE.md
       - Prompt Tools: TOOLS.md

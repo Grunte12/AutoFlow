@@ -534,6 +534,15 @@ class Settings(BaseSettings):
             "that use a different transport (e.g. bearer/sapisidhash)."
         ),
     )
+    browser_background: bool = Field(
+        default=False,
+        description=(
+            "macOS-only opt-in: start headed Chrome without a foreground window, "
+            "then create minimized background generation pages. Login stays visible. "
+            "Unsupported Chrome fails before submission, never falls back to visible. "
+            "Override via GFLOW_CLI_BROWSER_BACKGROUND. This is not headless mode."
+        ),
+    )
     browser_window_position: str = Field(
         default="-30000,-30000",
         pattern=r"^(-?\d+,-?\d+)?$",

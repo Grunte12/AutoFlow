@@ -130,8 +130,12 @@ async def _await_signed_record(
 def _collect(text: str, *, media_id: str, into: dict[str, Any]) -> None:
     """Record the first frame that is a status record for *media_id* with a URL."""
     for rpcid, payload in parse_frames(text):
+        # Project listings can carry cached/superseded links. The per-clip
+        # result RPC is the measured source of a newly signed download URL.
+        if rpcid != "as29s":
+            continue
         try:
-            record = generation_record(rpcid, payload)
+            record = generation_record(rpcid, payload, media_id=media_id)
         except WireFormatError:
             # Most frames on a project load are not generation records. A frame that
             # does not decode is not evidence about THIS media id.

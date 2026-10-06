@@ -4,6 +4,8 @@ Welcome to the `gflow-cli` documentation. This index is the routing layer: it te
 
 | Doc | Purpose | Read when… |
 |---|---|---|
+| [AutoFlow](AUTOFLOW.md) | Fork installation, native MCP, source updates and verification limits | Installing this fork rather than the upstream package |
+| [Video batch](VIDEO_BATCH.md) | Supplied-image sequential i2v/r2v manifest, dry-run, durable resume and catalog recovery | Running multiple shots without shell loops |
 | [README](../README.md) | Project overview, install, quick start | First time landing on the repo |
 | [docs/DEMOS.md](DEMOS.md) | Gallery of `gflow` in action (terminal + split-screen Flow recordings) | You want to see what gflow looks like running |
 | [AGENTS.md](../AGENTS.md) | Universal coding-agent spec — Cursor / Codex / Aider / Antigravity / Jules / etc. | Any AI coding agent enters the repo |

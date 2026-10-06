@@ -35,6 +35,7 @@ from gflow_cli.api.video import (
     reference_cap_for,
     validate_duration_for_model,
 )
+from gflow_cli.cli_video_batch import batch
 from gflow_cli.config import UiMode, get_settings
 from gflow_cli.data.models import AssetKind, OperationKind
 from gflow_cli.data.recorder import OperationRecorder, record_failed_operation_safe
@@ -1138,6 +1139,9 @@ def _chain_json(
 @click.group()
 def video() -> None:
     """Generate and manage videos via Google Flow Veo."""
+
+
+video.add_command(batch)
 
 
 @video.command(

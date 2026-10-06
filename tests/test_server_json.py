@@ -109,15 +109,14 @@ def test_package_arguments_spell_the_stdio_subcommand(package: dict[str, Any]) -
     assert values == ["mcp", "run"], values
 
 
-def test_readme_carries_the_ownership_token(server: dict[str, Any]) -> None:
-    """PyPI ownership is proved by an `mcp-name:` token in the package description.
-
-    The registry reads the PyPI long description — which is README.md — and looks for
-    `mcp-name: <server name>`. No token, no verified publish.
-    """
+def test_fork_does_not_claim_the_upstream_registry_identity(server: dict[str, Any]) -> None:
+    """The source preview retains compatibility metadata, not publish ownership."""
     readme = _README.read_text(encoding="utf-8")
     token = f"mcp-name: {server['name']}"
-    assert token in readme, f"README.md must contain {token!r} for the registry to verify us"
+    assert token not in readme
+    assert "Source preview, not a stable release" in readme
+    workflow = (_README.parent / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    assert "github.repository == 'ffroliva/gflow-cli'" in workflow
 
 
 def test_repository_points_at_this_project(server: dict[str, Any]) -> None:

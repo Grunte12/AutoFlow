@@ -37,6 +37,16 @@ MP4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 92  # 100 bytes, valid magic
 _XSSI = ")]}'\n\n"
 
 
+def test_recovery_ignores_cached_project_listing_urls() -> None:
+    """Zzl0ze may carry a stale link; only as29s issues a fresh clip URL."""
+    from gflow_cli.api.transports.migrated_recover import _collect
+
+    into: dict[str, Any] = {}
+    stale = _as29s_frame().replace('"as29s"', '"Zzl0ze"')
+    _collect(stale, media_id=MEDIA_ID, into=into)
+    assert into == {}
+
+
 def _as29s_frame(*, media_id: str = MEDIA_ID, url: str = SIGNED, size: int = len(MP4)) -> str:
     """One `batchexecute` envelope shaped like the status reply the app receives.
 

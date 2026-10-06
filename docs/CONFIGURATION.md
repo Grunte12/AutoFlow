@@ -229,14 +229,14 @@ gflow tools run creative-director "cat in space" --json   # check "was_expanded"
 
 ### `GFLOW_MCP_NO_SPEND`
 
-**What:** Registration-time gating of the credit-spending MCP tools (#496). When set, `gflow mcp run` and `gflow serve` never register `gflow_generate_image` and `gflow_generate_video`, so a connected agent cannot even see them in `tools/list` — invisible beats refused (no wasted calls, no refusal path for prompt injection to probe, no reliance on the model honoring an error). Every read-only tool stays available.
-**Default:** unset (both generate tools registered).
+**What:** Registration-time gating of the credit-spending MCP tools (#496). When set, `gflow mcp run` and `gflow serve` never register `gflow_generate_image`, `gflow_generate_video` or `gflow_generate_video_batch`, so a connected agent cannot even see them in `tools/list` — invisible beats refused (no wasted calls, no refusal path for prompt injection to probe, no reliance on the model honoring an error). Every read-only tool stays available.
+**Default:** unset (all generation tools registered).
 **Accepted:** the value is lower-cased and stripped before comparison, so the falsy set `0`/`false`/`off`/`no`/`n`/`f`/empty is matched **case-insensitively** — `FALSE`, `Off` and `NO` all leave no-spend **disabled**, exactly like their lowercase forms. Any other value enables it. The falsy vocabulary deliberately matches Click's, so a value cannot mean "off" to the `--no-spend` flag and "on" to the server-side policy.
-**⚠️ Fails toward spending:** an unrecognised *falsy-looking* value is not a safety net — if you want the guarantee, set `GFLOW_MCP_NO_SPEND=1` (or pass `--no-spend`) and confirm the two generate tools are absent from `tools/list`.
+**⚠️ Fails toward spending:** an unrecognised *falsy-looking* value is not a safety net — if you want the guarantee, set `GFLOW_MCP_NO_SPEND=1` (or pass `--no-spend`) and confirm the three generation tools are absent from `tools/list`.
 **Equivalent flag:** `gflow mcp run --no-spend` (and `gflow serve --no-spend`), which sets this variable for you. The env var is the only route that covers a server you did not start yourself — e.g. one launched from an MCP client config. See [MCP § Option A2](MCP.md#option-a2-read-only-server).
 **Note:** this is the one variable that does not carry the `GFLOW_CLI_` prefix — it is scoped to the MCP server, not the CLI.
 
-Both generate tools are gated, not just video: image generation is only *empirically* free ("~0 credits observed"), and no-spend is meant to be a hard guarantee.
+All generation tools are gated, not just video: image generation is only *empirically* free ("~0 credits observed"), and no-spend is meant to be a hard guarantee.
 
 ### `GFLOW_CLI_AUTH_LOGIN_TIMEOUT`
 
@@ -348,6 +348,28 @@ GFLOW_CLI_HISTORY_PROMPTS=redacted gflow image t2i "confidential brief"
 **Values:** `true` | `false`
 **Default:** `false` — **headed real Chrome is the production default**, not an opt-in fallback. The `ui_automation` transport (gflow-cli's only production transport) requires a headed browser: reCAPTCHA Enterprise rejects headless Chromium with an immediate 403, so `headless=true` is not a WAF workaround — it only exists for CI/CD environments running a non-`ui_automation` transport (e.g. `bearer`/`sapisidhash`, experimental).
 **WAF-sensitive runs:** set `GFLOW_CLI_HEADLESS=false` explicitly (it is already the default, but pin it in CI/CD env files or scripts that also set `headless=true` for a different transport, so a transport switch back to `ui_automation` doesn't silently regress to a rejected headless launch).
+
+### `GFLOW_CLI_BROWSER_BACKGROUND`
+
+**What:** macOS-only, generation-browser background mode. This remains headed
+Chrome, not headless. Set `true` in the CLI or MCP **server process environment**;
+there is no separate tool payload option. Default `false` preserves upstream behavior.
+
+Chrome starts without its usual foreground page. Owned generation windows are
+created without activation and minimized before any navigation or interaction.
+The status-stall observer never brings these windows forward. Authentication
+(`gflow auth login`) remains visible and unchanged.
+
+Local macOS Chrome tests cover two pages, focus retention, typing, file upload,
+settings clicks, timers, and stall handling. Chrome may briefly construct a window
+before its explicit minimized-state readback; zero-frame visual invisibility is
+not guaranteed. Flow compatibility is checked separately without generation;
+this is not a guarantee of identical behavior on every Chrome version.
+
+Unsupported platform/CDP setup fails before submission, with no visible fallback.
+To watch a run, set `GFLOW_CLI_BROWSER_BACKGROUND=false` and choose a visible
+`GFLOW_CLI_BROWSER_WINDOW_POSITION`. For consent/account verification, use login.
+This uses only the Playwright-owned private pipe, not a public CDP attach service.
 
 ### `GFLOW_CLI_BROWSER_WINDOW_POSITION`
 

@@ -72,6 +72,7 @@ from gflow_cli.api.video import (
     VideoResult,
     VideoStarted,
     VideoStatus,
+    is_media_uuid,
 )
 from gflow_cli.errors import (
     CONTENT_SAFETY_REASONS,
@@ -1680,6 +1681,38 @@ class MigratedComposer:
         )
         raise UiSelectorDriftError(detail=detail)
 
+    async def _duration_radio(self, pane: Any, seconds: int) -> Any | None:
+        """Identify the duration axis by its complete numeric domain, not its unit.
+
+        Measured on Flow's Thai UI: the radio has no value/data attribute, and even
+        an English document can render translated units. Other numeric axes have
+        different domains. Ambiguous or incomplete rows must never be guessed.
+        """
+        groups = pane.locator(RADIOGROUP)
+        values: list[list[int | None]] = await groups.evaluate_all(
+            """groups => groups.map(g => [...g.querySelectorAll('[role=radio]')].map(r => {
+                if (!r.getClientRects().length) return null;
+                const m = (r.textContent || '').match(/^\\s*(\\d+)\\D*$/u);
+                return m ? Number(m[1]) : null;
+            }))"""
+        )
+        candidates = [
+            index
+            for index, row in enumerate(values)
+            if all(value is not None for value in row)
+            and sorted(value for value in row if value is not None) in ([4, 6, 8], [4, 6, 8, 10])
+        ]
+        if len(candidates) > 1:
+            raise UiSelectorDriftError(
+                detail="migrated host: ambiguous duration controls; no duration was selected"
+            )
+        if not candidates:
+            return None
+        index = candidates[0]
+        if seconds not in values[index]:
+            return None
+        return groups.nth(index).locator(RADIO).nth(values[index].index(seconds))
+
     async def _pin_r2v_duration(self, page: Page, pane: Any) -> None:
         """Bind the base duration for a references run, when this pane offers durations.
 
@@ -1694,7 +1727,7 @@ class MigratedComposer:
         this cannot go through :meth:`_select`, whose duration branch raises exit 11.
         """
         wanted = f"{R2V_DURATION_S}s"
-        if not await pane.locator(RADIO).filter(has_text=_exact(wanted)).count():
+        if await self._duration_radio(pane, R2V_DURATION_S) is None:
             log.info("migrated.r2v_duration_row_absent", wanted=wanted)
             return
         await self._select(page, pane, axis="duration", text=wanted)
@@ -1712,13 +1745,15 @@ class MigratedComposer:
         """Click one radio and read ``aria-checked`` back; re-query once on a stale node."""
         radios = pane.locator(RADIO)
         wanted = text if text is not None else str(lig)
-        matches = (
-            radios.filter(has=_ligature(page, lig))
-            if lig
-            else radios.filter(has_text=_exact(wanted))
-        )
-        target = matches.first
-        if not await target.count():
+        if axis == "duration":
+            matches = await self._duration_radio(pane, int(wanted.removesuffix("s")))
+        else:
+            matches = (
+                radios.filter(has=_ligature(page, lig))
+                if lig
+                else radios.filter(has_text=_exact(wanted))
+            )
+        if matches is None or not await matches.first.count():
             groups = await pane.locator(RADIOGROUP).count()
             # Only the duration row is a per-account/model capability (#650) — a missing
             # mode/aspect/count radio, or an empty pane, is the DOM having changed.
@@ -1731,15 +1766,15 @@ class MigratedComposer:
                 )
             raise ConfigurationError(
                 detail=(
-                    f"the migrated Flow host renders no duration control offering {wanted!r} "
-                    f"for this account and model ({groups} option groups shown)"
+                    f"could not identify a duration control for {wanted!r} in the migrated "
+                    f"Flow settings ({groups} option groups shown); no generation was submitted"
                 ),
                 remediation_hint=(
-                    "Drop --duration to accept Flow's default length, or pick a model whose "
-                    "settings pane shows a duration row (on the maintainer cohort only "
-                    "Omni 1.1 Flash does)."
+                    "Inspect the model's actual duration options. This may be a selector "
+                    "change, not an unsupported duration; do not silently substitute a length."
                 ),
             )
+        target = matches.first
         if await target.get_attribute("aria-checked") == "true":
             return
         await target.click(timeout=4000)
@@ -2373,9 +2408,15 @@ class MigratedComposer:
             await page.wait_for_timeout(2200)
             await page.keyboard.type(name, delay=100)
             await page.wait_for_timeout(2500)
-            offered = [t.strip() for t in await page.locator(PICKER_OPTION).all_text_contents()]
-            await page.keyboard.press("Enter")
-            await page.wait_for_timeout(2500)
+            # Preserve the Oct5 no-submit safety fix across source installations.
+            # Empty/hidden results must not send Enter to the composer itself.
+            offered = [
+                t.strip()
+                for t in await page.locator(f"{PICKER_OPTION}:visible").all_text_contents()
+            ]
+            if offered:
+                await page.keyboard.press("Enter")
+                await page.wait_for_timeout(2500)
             chips = await self.read_chips(page)
             if len(chips) == expect_chips:
                 await page.keyboard.type(" ", delay=80)
@@ -2660,6 +2701,9 @@ class MigratedComposer:
         terminal: asyncio.Future[GenerationRecord] = loop.create_future()
         done_no_url: asyncio.Future[GenerationRecord] = loop.create_future()
         workflow: dict[str, str] = {}
+        # Historical in-process callers may carry a display key rather than a
+        # UUID. Only a canonical project identity can constrain a wire record.
+        expected_project = project_id if project_id and is_media_uuid(project_id) else None
 
         def _settle(rec: GenerationRecord) -> None:
             if rec.is_failed or (rec.is_done and rec.video_url):
@@ -2704,7 +2748,7 @@ class MigratedComposer:
                 seen_submit_rpcs.add(rid)
                 if rid in SUBMIT_RPCS and not submitted.done():
                     try:
-                        rec = generation_record(rid, payload)
+                        rec = generation_record(rid, payload, project_id=expected_project)
                     except WireFormatError as exc:
                         submitted.set_exception(exc)
                         return
@@ -2720,7 +2764,9 @@ class MigratedComposer:
                     _settle(rec)
                 elif rid in STATUS_RPCS and workflow:
                     try:
-                        rec = generation_record(rid, payload)
+                        rec = generation_record(
+                            rid, payload, project_id=expected_project, workflow_id=workflow["id"]
+                        )
                     except WireFormatError:
                         continue
                     if rec.workflow_id != workflow["id"]:

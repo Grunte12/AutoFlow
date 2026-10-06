@@ -542,6 +542,10 @@ class FlowApiClient:
                 "and cookies — do not share it publicly or attach it to a public "
                 "bug report.",
             )
+        if self.settings.browser_background:
+            from gflow_cli.background_browser import background_launch_kwargs
+
+            kwargs = background_launch_kwargs(kwargs, self.profile_dir)
         return kwargs
 
     def _log_and_guard_launch(self, kwargs: dict[str, Any]) -> None:
@@ -1157,6 +1161,10 @@ class FlowApiClient:
     async def _open_page_pool(self, n: int) -> list[Page]:
         """Open ``n`` Pages in the context, reusing the default Page as slot 0."""
         assert self._context is not None
+        if self.settings.browser_background:
+            from gflow_cli.background_browser import new_background_page
+
+            return [await new_background_page(self._context) for _ in range(n)]
         pages: list[Page] = []
         if self._context.pages:
             pages.append(self._context.pages[0])

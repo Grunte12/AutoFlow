@@ -52,6 +52,7 @@ CLI_TO_MCP: dict[str, str] = {
     "video t2v": "gflow_generate_video",  # mode="t2v"
     "video i2v": "gflow_generate_video",  # mode="i2v"
     "video r2v": "gflow_generate_video",  # mode="r2v"
+    "video batch": "gflow_generate_video_batch",
     "tools list": "gflow_list_tools",
     "tools show": "gflow_list_tools",  # list output carries the show detail
     "auth status": "gflow_auth_status",
@@ -245,6 +246,9 @@ _OPTION_EXEMPT: dict[str, str] = {
     "instructions apply:file": "reads a local file; the tool takes the text directly",
     "tools show:name": "coarse mapping — one MCP tool lists and shows; the name is its filter",
     "video i2v:end_image_deprecated": "deprecated alias retained for CLI compatibility only",
+    "video batch:manifest": (
+        "local JSON path plumbing; MCP accepts the parsed project and shot fields directly"
+    ),
 }
 
 

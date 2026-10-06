@@ -449,7 +449,9 @@ def _fake_download(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     written = tmp_path / "9ad33c78.mp4"
     written.write_bytes(b"\x00\x00\x00\x18ftypmp42")
 
-    async def _fake(*, media_id: str, profile: str | None, out_dir: Path | None) -> DownloadedMedia:
+    async def _fake(
+        *, media_id: str, profile: str | None, project_id: str | None = None, out_dir: Path | None
+    ) -> DownloadedMedia:
         return DownloadedMedia(
             media_id=media_id,
             workflow_id="wf-42",
@@ -481,6 +483,53 @@ def test_data_download_emits_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     assert payload["workflow_id"] == "wf-42"
     assert payload["bytes"] > 0
     assert payload["path"].endswith(".mp4")
+
+
+def test_data_download_passes_explicit_project_to_service(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from gflow_cli.services.media_recovery import DownloadedMedia
+
+    project_id = "223e4567-e89b-12d3-a456-426614174000"
+    seen: dict[str, object] = {}
+    written = tmp_path / "clip.mp4"
+    written.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+
+    async def _fake_download(
+        *, media_id: str, profile: str | None, project_id: str | None = None, out_dir: Path | None
+    ) -> DownloadedMedia:
+        seen.update(
+            media_id=media_id,
+            profile=profile,
+            project_id=project_id,
+            out_dir=out_dir,
+        )
+        return DownloadedMedia(
+            media_id=media_id,
+            workflow_id="wf-42",
+            profile_name=profile or "alice",
+            project_id=project_id or "",
+            path=written,
+            bytes=written.stat().st_size,
+        )
+
+    monkeypatch.setattr("gflow_cli.cli_data.download_media", _fake_download)
+    result = CliRunner().invoke(
+        main,
+        [
+            "data",
+            "download",
+            "123e4567-e89b-12d3-a456-426614174000",
+            "--profile",
+            "alice",
+            "--project",
+            project_id,
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert seen["project_id"] == project_id
+    assert seen["profile"] == "alice"
 
 
 def test_data_download_reports_a_catalog_miss(empty_db: Path) -> None:

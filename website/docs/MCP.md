@@ -100,7 +100,8 @@ The server registers three protocol surfaces:
 * `gflow_character_show(project, entity_id, name, profile)`: Shows one character by id or exact display name (exactly one selector required). An ambiguous name is refused rather than resolved arbitrarily — which is the reason to prefer the id. Read-only; drives a browser session.
 * `gflow_character_voices()`: Lists the preset voices available for Character TTS (name, description, sample URL). A static in-process lookup — no network, no browser, no profile, no cost. Call it to pick a valid voice name.
 * `gflow_list_projects(profile, limit, offset)`: Queries the SQLite catalog for recent generation folders, paginated — the response carries `count` (rows in this page), `offset`, `has_more`, and `next_offset` (pass it back as `offset` for the next page; `null` on the last page).
-* `gflow_download_media(media_id, out_dir, profile)`: Fetches an already-generated asset from Flow by its media ID and writes it to disk — the recovery path for a generation that was billed but whose download failed. Spends no credits. The bytes are verified against the size Flow reports before the file is written, and the catalog's `local_files` row is updated. Returns `path`, `bytes`, `media_id`, `workflow_id`, `project_id` and `profile`. The transfer retries a dropped connection internally ([#895](https://github.com/ffroliva/gflow-cli/issues/895)), so a failure marked `retryable` means pause and call again — not immediately, and not in a tight loop: each call opens a browser under a per-profile lease, and a second concurrent call fails on that lease instead (exit 11).
+* `gflow_generate_video_batch(shots, project, out_dir, profile, model, aspect, duration, resolution, state_path, dry_run)`: Runs 1–4 supplied-local-image i2v/r2v shots sequentially in one existing project. This tool returns the batch result after completion, unlike queued single-shot tools. Local paths resolve on the MCP server. `dry_run=true` validates without browser, uploads or credits. Reuse the same state/output paths and exact inputs; never replay an indeterminate shot. Results include verified files, completed/not-started shot IDs and optional `catalog_pending`; catalog persistence trouble does not invalidate completed files. See [VIDEO_BATCH](VIDEO_BATCH.md) and [AutoFlow setup](AUTOFLOW.md) for examples and recovery.
+* `gflow_download_media(media_id, out_dir, profile, project)`: Fetches an already-generated asset from Flow by its media ID and writes it to disk — the recovery path for a generation that was billed but whose download failed. Spends no credits. If the media is absent from the local catalog, supply both `project` (the existing Flow project UUID) and `profile` (the saved account profile); catalog conflicts are refused rather than guessed. The bytes are verified against the size Flow reports before the file is written, and the catalog's `local_files` row is updated. Returns `path`, `bytes`, `media_id`, `workflow_id`, `project_id` and `profile`. The transfer retries a dropped connection internally ([#895](https://github.com/ffroliva/gflow-cli/issues/895)), so a failure marked `retryable` means pause and call again — not immediately, and not in a tight loop: each call opens a browser under a per-profile lease, and a second concurrent call fails on that lease instead (exit 11).
 * `gflow_list_tools()`: Lists the prompt tools (name/title/description/category) accepted by the generate tools' `tools` param.
 * `gflow_instructions_list(project, profile)`: Lists a project's persistent Agent-Mode instruction cards (live server brief; credits-free).
 * `gflow_instructions_add(project, title, text, refs, enabled, profile)`: Adds a persistent instruction card. Each ref is classified automatically — local image path → uploaded image reference, asset UUID → image reference, anything else → character id/name (mirrors CLI `instructions add --ref`).
@@ -181,6 +182,11 @@ traceback go to the server-side structured log (`mcp.tool.unexpected_error`).
 
 ## 4. Setup Instructions
 
+**AutoFlow fork:** install from [AutoFlow setup](AUTOFLOW.md), then register
+`gflow mcp run` directly. The marketplace/PyPI examples below refer to upstream
+`ffroliva/gflow-cli`, not this fork's repairs. Source preview does not authorize a
+registry/PyPI release; do not replace your fork installation with upstream accidentally.
+
 ### Claude Code — the plugin (one step)
 
 ```
@@ -252,8 +258,8 @@ Use this if you installed `gflow-cli` globally (e.g. via `uv tool install gflow-
 
 ##### Option A2: Read-only server
 
-Use this when the agent must never be able to spend credits (#496). The two
-credit-spending tools (`gflow_generate_image`, `gflow_generate_video`) are then
+Use this when the agent must never be able to spend credits (#496). The three
+credit-spending tools (`gflow_generate_image`, `gflow_generate_video`, `gflow_generate_video_batch`) are then
 **never registered**, so they do not appear in `tools/list` at all — invisible
 rather than refused. Every read-only tool stays available.
 
@@ -314,7 +320,7 @@ For decoupled clients, local web interfaces, or multi-process frontends, run the
 ```bash
 gflow serve --port 8000 --host 127.0.0.1 --profile default
 
-# Read-only daemon — the two credit-spending tools are never registered (#496):
+# No-spend daemon — all three generation tools, including video batch, are absent:
 gflow serve --port 8000 --host 127.0.0.1 --profile default --no-spend
 ```
 This serves the MCP server over **Streamable HTTP**, the current spec transport:
@@ -383,7 +389,7 @@ Because the MCP server runs locally, inheriting the host user's permissions and 
    This prevents crashes caused by non-ASCII prompt strings on Windows.
 4. **Local Rate-Limiting:** Enforces a token-bucket rate limiter with a capacity of 8 tokens and a refill rate of 1 token every 20 seconds (allowing burst filmmaking tasks without timeouts). This is the **only** spend brake — there is no credit-budget accounting or per-session/daily cap (#495; a registration-time `--no-spend` gate is tracked in #496).
 5. **CLI-MCP Parameter Symmetry:** Two CI layers guard the surfaces against drift: `tests/mcp/test_cli_parity.py` forces an explicit MCP decision (mapped tool or stated exemption) for every CLI leaf command, and `tests/mcp/test_server.py::TestCliMcpParameterSymmetry` compares CLI Click parameters against registered tool signatures for the two generate tools. Parameter-level comparison does not yet cover the other tools.
-6. **No-Spend Mode (#496):** `gflow mcp run --no-spend` (or `GFLOW_MCP_NO_SPEND=1`, which also covers `gflow serve`) never registers the credit-spending generate tools — `gflow_generate_image` and `gflow_generate_video` are absent from `tools/list` entirely, rather than present-but-refusing. Both are gated because image generation is only empirically free and no-spend is a hard guarantee. Listing, instructions, and other read-only tools remain available.
+6. **No-Spend Mode (#496):** `gflow mcp run --no-spend` (or `GFLOW_MCP_NO_SPEND=1`, which also covers `gflow serve`) never registers the credit-spending generate tools — `gflow_generate_image`, `gflow_generate_video` and `gflow_generate_video_batch` are absent from `tools/list` entirely, rather than present-but-refusing. All are gated because image generation is only empirically free and no-spend is a hard guarantee. Listing, instructions, and other read-only tools remain available.
 
 ---
 

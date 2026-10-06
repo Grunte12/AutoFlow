@@ -1497,39 +1497,32 @@ class TestI2VAssetRef:
 
 
 # ---------------------------------------------------------------------------
-# `video batch` removal (Task 1, production-readiness-hardening): the stub
-# never worked (always printed "not yet available" and exited 1). It must be
-# gone from the Click group entirely — not just erroring a different way.
+# AutoFlow replaces the removed upstream stub with a real supplied-image
+# manifest command. Invalid inputs must still fail before profile resolution.
 # ---------------------------------------------------------------------------
 
 
-def test_video_help_does_not_advertise_batch() -> None:
-    """`batch` must not be registered on the video Click group, and must not
-    appear in `gflow video --help`'s output (registration-level check, not
-    just a substring scan, so this can't false-positive on incidental prose)."""
-    assert "batch" not in video.commands
+def test_video_help_advertises_implemented_batch() -> None:
+    from gflow_cli.cli_video_batch import batch
+
+    assert video.commands["batch"] is batch
     result = CliRunner().invoke(video, ["--help"])
     assert result.exit_code == 0
-    assert "batch" not in result.output
+    assert "batch" in result.output
 
 
-def test_video_batch_is_rejected_before_profile_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`video batch` must be rejected by Click's own command routing (exit 2,
-    "No such command") without ever reaching profile resolution.
-
-    A tripwire on `_resolve_profile` (rather than merely asserting on the exit
-    code) rules out the coincidental case where a still-registered stub fails
-    for an unrelated reason (e.g. no profile configured) that happens to also
-    exit 2.
-    """
+def test_video_batch_missing_manifest_fails_before_profile_resolution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Click rejects a missing manifest without touching account/profile state."""
 
     def _must_not_run(*_a: object, **_k: object) -> str:
-        raise AssertionError("_resolve_profile must not run for a removed command")
+        raise AssertionError("_resolve_profile must not run for a missing manifest")
 
-    monkeypatch.setattr("gflow_cli.cli_video._resolve_profile", _must_not_run)
-    result = CliRunner().invoke(video, ["batch", "manifest.tsv"])
+    monkeypatch.setattr("gflow_cli.cli_video_batch._resolve_profile", _must_not_run)
+    result = CliRunner().invoke(video, ["batch", str(tmp_path / "missing.json")])
     assert result.exit_code == 2
-    assert "No such command" in result.output
+    assert "does not exist" in result.output
 
 
 def test_image_batch_remains_a_leaf_command() -> None:

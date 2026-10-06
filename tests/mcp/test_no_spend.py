@@ -4,7 +4,7 @@
 Under no-spend the generate tools are never registered — invisible in
 ``tools/list`` beats refused at call time: no wasted calls, no refusal path
 for prompt injection to probe, no reliance on the model honoring an error.
-Both generate tools are gated: image generation is only *empirically* free,
+All generation tools are gated: image generation is only *empirically* free,
 and no-spend must be a hard guarantee.
 """
 
@@ -44,6 +44,7 @@ def test_default_mode_keeps_generate_tools(
     names = _tool_names(registered_server)
     assert "gflow_generate_image" in names
     assert "gflow_generate_video" in names
+    assert "gflow_generate_video_batch" in names
 
 
 def test_no_spend_removes_both_generate_tools(
@@ -54,6 +55,7 @@ def test_no_spend_removes_both_generate_tools(
     names = _tool_names(registered_server)
     assert "gflow_generate_image" not in names
     assert "gflow_generate_video" not in names
+    assert "gflow_generate_video_batch" not in names
     # Read-only surfaces stay available.
     assert "gflow_list_projects" in names
     assert "gflow_list_tools" in names

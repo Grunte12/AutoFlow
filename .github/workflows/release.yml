@@ -12,6 +12,8 @@ permissions:
 
 jobs:
   build-and-publish:
+    # A fork must not publish into upstream's package/registry namespaces.
+    if: github.repository == 'ffroliva/gflow-cli'
     runs-on: ubuntu-latest
     permissions:
       contents: write # for creating GitHub Releases
@@ -112,7 +114,7 @@ jobs:
     # And the call runs against this TAG, so server.json is the released one.
     needs: build-and-publish
     # A pre-release must never become the registry's ACTIVE listing.
-    if: needs.build-and-publish.outputs.prerelease != 'true'
+    if: github.repository == 'ffroliva/gflow-cli' && needs.build-and-publish.outputs.prerelease != 'true'
     permissions:
       contents: read
       id-token: write # OIDC exchange with registry.modelcontextprotocol.io

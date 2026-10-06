@@ -116,6 +116,13 @@ class TestQueuedTaskEnvelope:
 
 
 class TestToolDocstringIsTrue:
+    def test_optional_project_locator_is_in_the_tool_schema(self, mcp_server: Any) -> None:
+        registered = mcp_server._tool_manager._tools["gflow_download_media"]  # pyright: ignore[reportPrivateUsage]
+        properties = registered.parameters.get("properties", {})
+
+        assert "project" in properties
+        assert "project" not in registered.parameters.get("required", [])
+
     def test_it_warns_against_an_agent_stacking_its_own_retry_loop(self, mcp_server: Any) -> None:
         """With `retryable: true` an agent will call again. Immediately re-calling opens a
         second browser under the per-profile lease and fails on *that* instead — a worse

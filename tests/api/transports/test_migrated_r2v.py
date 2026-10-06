@@ -212,7 +212,10 @@ class FakeComposerPage:
     def locator(self, css: str) -> FakeLoc:
         if css == "[contenteditable='true']":
             return FakeLoc(self, "composer", ["composer"])
-        if css == "button.asset-item[role='option']":
+        if css in (
+            "button.asset-item[role='option']",
+            "button.asset-item[role='option']:visible",
+        ):
             return FakeLoc(self, "asset", list(self.assets))
         if css == "button":
             return FakeLoc(self, "button", ["button"])

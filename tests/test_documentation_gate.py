@@ -91,11 +91,18 @@ CURRENT_OPERATOR_DOCS: tuple[str, ...] = (
 )
 
 
-def test_current_docs_do_not_instruct_video_batch() -> None:
+def test_current_docs_do_not_describe_batch_as_an_unimplemented_stub() -> None:
     for rel_path in CURRENT_OPERATOR_DOCS:
-        text = (ROOT / rel_path).read_text(encoding="utf-8")
+        text = (ROOT / rel_path).read_text(encoding="utf-8").lower()
 
-        assert "gflow video batch" not in text, f"{rel_path} still references gflow video batch"
+        assert "video batch` is removed" not in text, rel_path
+        assert "video batch` is a removed stub" not in text, rel_path
+        assert "video batch` (queued for phase b)" not in text, rel_path
+
+    batch_docs = (ROOT / "docs/VIDEO_BATCH.md").read_text(encoding="utf-8")
+    assert "gflow video batch" in batch_docs
+    assert "--dry-run" in batch_docs
+    assert "gflow_generate_video_batch" in batch_docs
 
 
 def test_changelog_unreleased_notes_video_batch_removal() -> None:

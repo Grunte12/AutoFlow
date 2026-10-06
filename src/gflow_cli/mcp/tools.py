@@ -79,7 +79,7 @@ class _TokenBucket:
         self._last_refill = time.monotonic()
         self._lock = asyncio.Lock()
 
-    async def acquire(self) -> bool:
+    async def acquire(self, tokens: int = 1) -> bool:
         """Try to acquire a token. Returns True if acquired, False if rate-limited."""
         async with self._lock:
             now = time.monotonic()
@@ -87,8 +87,8 @@ class _TokenBucket:
             self._tokens = min(self._capacity, self._tokens + elapsed * self._refill_rate)
             self._last_refill = now
 
-            if self._tokens >= 1:
-                self._tokens -= 1
+            if self._tokens >= tokens:
+                self._tokens -= tokens
                 return True
             return False
 
@@ -1252,6 +1252,69 @@ async def gflow_generate_video(  # NOSONAR
 
 
 @server.tool(
+    name="gflow_generate_video_batch",
+    description=(
+        "Run 1-4 sequential count-one local-reference i2v/r2v shots in one existing project. "
+        "All shots are validated before opening Chrome. Rows use id, mode, prompt or prompt_file, "
+        "start_image/end_image for i2v or reference_images for r2v, plus optional generation "
+        "settings. Local paths resolve against the server working directory. Uses the same "
+        "durable runner as gflow video batch; uncertain submission stops remaining shots and "
+        "must not be retried automatically. Reuse state_path and out_dir to resume safely. "
+        "Returns bounded shot IDs, verified local files and stopped/not-started state. "
+        "catalog_pending lists completed shot IDs whose catalog persistence needs reconciliation; "
+        "their handles remain in files. Resume the same inputs/state to reconcile, not regenerate. "
+        "Never returns prompts. "
+        "dry_run validates locally without opening a browser or spending credits."
+    ),
+)
+@_guarded
+async def gflow_generate_video_batch(
+    shots: list[dict[str, Any]],
+    project: str,
+    out_dir: str,
+    profile: str = _DEFAULT_PROFILE,
+    model: str | None = None,
+    aspect: str | None = None,
+    duration: int | None = None,
+    resolution: str | None = None,
+    state_path: str | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Invoke the shared synchronous-completion batch service, not queued single-shot tools."""
+    from gflow_cli.services.video_batch import prepare_video_batch, run_video_batch
+
+    defaults = {
+        key: value
+        for key, value in {
+            "model": model,
+            "aspect": aspect,
+            "duration": duration,
+            "resolution": resolution,
+        }.items()
+        if value is not None
+    }
+    manifest = {"project_id": project, "shots": shots, "defaults": defaults}
+    base_dir = Path.cwd()
+    prepare_video_batch(manifest, base_dir)
+    resolved = _resolve_and_validate_profile(profile)
+    if isinstance(resolved, dict):
+        return resolved
+    if not dry_run and not await _rate_limiter.acquire(len(shots)):
+        return _rate_limited_envelope()
+    settings = get_settings()
+    async with _profile_lock(resolved):
+        return await run_video_batch(
+            manifest,
+            base_dir=base_dir,
+            profile=resolved,
+            profile_dir=settings.profile_subdir(resolved),
+            out_dir=Path(out_dir),
+            state_path=Path(state_path) if state_path is not None else None,
+            dry_run=dry_run,
+        )
+
+
+@server.tool(
     name="gflow_list_tools",
     description="List available gflow prompt tools (name, title, description, category).",
 )
@@ -1454,6 +1517,9 @@ async def gflow_character_show(
         "against the size Flow reports before the file is written. Video only: an image "
         "media ID is refused immediately (exit 11) because the signed URL this needs "
         "comes from a record only a clip's route emits. See issue #877. "
+        "If the media ID is missing from the local catalog, pass project=<Flow project UUID> "
+        "and profile=<account name>; the catalog row is created only after Flow verifies "
+        "the recovered clip. "
         "The transfer already retries a dropped connection internally, so a failure "
         "marked retryable means wait a moment and call again — never immediately, and "
         "never in a tight loop: each call opens a browser under a per-profile lease, and "
@@ -1465,6 +1531,7 @@ async def gflow_download_media(
     media_id: str,
     out_dir: str | None = None,
     profile: str | None = None,
+    project: str | None = None,
 ) -> dict[str, Any]:
     """Recover an already-generated asset by media id.
 
@@ -1474,15 +1541,18 @@ async def gflow_download_media(
         out_dir: Directory to write into. Defaults to the configured output dir.
         profile: Restrict the catalog lookup to one profile. Omit to search all —
             an id present under several profiles is reported as an error naming them.
+        project: Flow project UUID for an already-generated clip missing from the local
+            catalog. In that case, also provide ``profile`` to scope the Flow account.
 
     Returns:
         Dict with the written ``path``, ``bytes``, ``media_id``, ``workflow_id``,
         ``project_id`` and ``profile``.
     """
-    log.info("mcp.tool.download_media", media_id=media_id, profile=profile)
+    log.info("mcp.tool.download_media", media_id=media_id, profile=profile, project=project)
     result = await download_media(
         media_id=media_id,
         profile=profile,
+        project_id=project,
         out_dir=Path(out_dir) if out_dir else None,
     )
     return {

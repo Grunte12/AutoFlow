@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from gflow_cli.data.models import AssetKind, AssetRecord
 from gflow_cli.data.repository import DataRepository
 from gflow_cli.data.store import DataStore
 from gflow_cli.errors import ConfigurationError, DataStoreError
@@ -116,6 +117,384 @@ class TestRecordLocalFile:
 
 
 class TestDownloadMedia:
+    @pytest.mark.asyncio
+    async def test_recovers_an_uncatalogued_clip_with_an_explicit_project(
+        self, catalog: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Only a verified clip earns a minimal, truthful catalog row."""
+        from gflow_cli.api.transports.migrated_recover import RecoveredClip
+
+        media_id = "123e4567-e89b-12d3-a456-426614174000"
+        project_id = "223e4567-e89b-12d3-a456-426614174000"
+        written = tmp_path / "out" / f"{media_id}.mp4"
+        written.parent.mkdir(parents=True)
+        written.write_bytes(MP4)
+        browser_profiles: list[str] = []
+
+        class _Client:
+            page = object()
+
+            async def __aenter__(self) -> _Client:
+                return self
+
+            async def __aexit__(self, *_: object) -> None:
+                return None
+
+        async def _fake_recover(_page: Any, **kwargs: Any) -> RecoveredClip:
+            assert kwargs["project_id"] == project_id
+            assert kwargs["media_id"] == media_id
+            assert kwargs["out_dir"] == tmp_path / "out"
+            # Do not invent an asset while Flow has not yet verified the clip.
+            with DataStore.open(catalog) as store:
+                assert DataRepository(store).get_asset_by_flow_media_id("alice", media_id) is None
+            return RecoveredClip(
+                media_id=media_id,
+                workflow_id="observed-workflow-42",
+                path=written,
+                bytes=len(MP4),
+            )
+
+        monkeypatch.setattr(
+            "gflow_cli._cli_helpers._make_provider_dir",
+            lambda name: browser_profiles.append(name) or tmp_path,
+        )
+        monkeypatch.setattr("gflow_cli.api.client.FlowApiClient", lambda **_k: _Client())
+        monkeypatch.setattr("gflow_cli.api.transports.migrated_recover.recover_clip", _fake_recover)
+
+        result = await download_media(
+            media_id=media_id,
+            profile="alice",
+            project_id=project_id,
+            out_dir=tmp_path / "out",
+        )
+
+        assert result.project_id == project_id
+        assert result.workflow_id == "observed-workflow-42"
+        assert browser_profiles == ["alice"]
+        with DataStore.open(catalog) as store:
+            after = DataRepository(store).get_asset_by_flow_media_id("alice", media_id)
+            row = store.conn.execute(
+                "SELECT kind, status, model, aspect_ratio, width, height, duration_seconds, seed "
+                "FROM assets WHERE profile_name = ? AND flow_media_id = ?",
+                ("alice", media_id),
+            ).fetchone()
+        assert after is not None
+        assert after.flow_project_id == project_id
+        assert after.flow_workflow_id == "observed-workflow-42"
+        assert written in [f.path for f in after.local_files]
+        assert row is not None
+        assert tuple(row) == ("video", "ready", None, None, None, None, None, None)
+
+    @pytest.mark.asyncio
+    async def test_no_project_keeps_the_catalog_miss_and_does_not_open_a_browser(
+        self, catalog: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        media_id = "323e4567-e89b-12d3-a456-426614174000"
+
+        def _boom(*_a: Any, **_k: Any) -> None:
+            raise AssertionError("a browser was launched for a no-project catalog miss")
+
+        monkeypatch.setattr("gflow_cli._cli_helpers._make_provider_dir", _boom)
+
+        with pytest.raises(DataStoreError, match="No local media record found"):
+            await download_media(media_id=media_id, profile="alice", out_dir=tmp_path)
+
+    @pytest.mark.asyncio
+    async def test_rejects_a_non_uuid_project_before_opening_a_browser(
+        self, catalog: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        media_id = "423e4567-e89b-12d3-a456-426614174000"
+
+        def _boom(*_a: Any, **_k: Any) -> None:
+            raise AssertionError("a browser was launched for an invalid project UUID")
+
+        monkeypatch.setattr("gflow_cli._cli_helpers._make_provider_dir", _boom)
+
+        with pytest.raises(ConfigurationError, match="project.*UUID"):
+            await download_media(
+                media_id=media_id,
+                profile="alice",
+                project_id="../not-a-uuid",
+                out_dir=tmp_path,
+            )
+
+        with DataStore.open(catalog) as store:
+            assert DataRepository(store).get_asset_by_flow_media_id("alice", media_id) is None
+
+    @pytest.mark.asyncio
+    async def test_rejects_a_non_uuid_media_id_before_opening_a_browser(
+        self, catalog: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _boom(*_a: Any, **_k: Any) -> None:
+            raise AssertionError("a browser was launched for an invalid media UUID")
+
+        monkeypatch.setattr("gflow_cli._cli_helpers._make_provider_dir", _boom)
+
+        with pytest.raises(ConfigurationError, match="media.*UUID"):
+            await download_media(
+                media_id="../not-a-uuid",
+                profile="alice",
+                project_id="423e4567-e89b-12d3-a456-426614174000",
+                out_dir=tmp_path,
+            )
+
+    @pytest.mark.asyncio
+    async def test_requires_a_profile_for_an_uncatalogued_clip(
+        self, catalog: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _boom(*_a: Any, **_k: Any) -> None:
+            raise AssertionError("a browser was launched without an auth profile")
+
+        monkeypatch.setattr("gflow_cli._cli_helpers._make_provider_dir", _boom)
+
+        with pytest.raises(ConfigurationError, match="profile"):
+            await download_media(
+                media_id="423e4567-e89b-12d3-a456-426614174000",
+                profile=None,
+                project_id="523e4567-e89b-12d3-a456-426614174000",
+                out_dir=tmp_path,
+            )
+
+    @pytest.mark.asyncio
+    async def test_adds_an_explicit_project_to_a_known_row_with_no_project(
+        self, catalog: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from gflow_cli.api.transports.migrated_recover import RecoveredClip
+
+        media_id = "423e4567-e89b-12d3-a456-426614174000"
+        project_id = "523e4567-e89b-12d3-a456-426614174000"
+        with DataStore.open(catalog) as store:
+            store.conn.execute(
+                "UPDATE assets SET flow_media_id = ?, flow_project_id = NULL "
+                "WHERE profile_name = 'alice' AND flow_media_id = ?",
+                (media_id, "vid-media-alice-0"),
+            )
+            store.conn.commit()
+            before = DataRepository(store).get_asset_by_flow_media_id("alice", media_id)
+        assert before is not None
+
+        written = tmp_path / f"{media_id}.mp4"
+        written.write_bytes(MP4)
+
+        class _Client:
+            page = object()
+
+            async def __aenter__(self) -> _Client:
+                return self
+
+            async def __aexit__(self, *_: object) -> None:
+                return None
+
+        async def _fake_recover(_page: Any, **kwargs: Any) -> RecoveredClip:
+            assert kwargs["project_id"] == project_id
+            return RecoveredClip(
+                media_id=media_id,
+                workflow_id="observed-workflow-43",
+                path=written,
+                bytes=len(MP4),
+            )
+
+        monkeypatch.setattr("gflow_cli._cli_helpers._make_provider_dir", lambda _n: tmp_path)
+        monkeypatch.setattr("gflow_cli.api.client.FlowApiClient", lambda **_k: _Client())
+        monkeypatch.setattr("gflow_cli.api.transports.migrated_recover.recover_clip", _fake_recover)
+
+        await download_media(
+            media_id=media_id,
+            profile="alice",
+            project_id=project_id,
+            out_dir=tmp_path,
+        )
+
+        with DataStore.open(catalog) as store:
+            after = DataRepository(store).get_asset_by_flow_media_id("alice", media_id)
+        assert after is not None
+        assert after.flow_project_id == project_id
+        assert after.metadata_json == before.metadata_json
+        assert written in [f.path for f in after.local_files]
+
+    @pytest.mark.parametrize(
+        ("kind", "catalog_project_id", "expected_error"),
+        [
+            (AssetKind.IMAGE, "923e4567-e89b-12d3-a456-426614174000", ConfigurationError),
+            (AssetKind.VIDEO, "a23e4567-e89b-12d3-a456-426614174000", DataStoreError),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_rechecks_a_row_that_appears_during_recovery(
+        self,
+        catalog: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        kind: AssetKind,
+        catalog_project_id: str,
+        expected_error: type[Exception],
+    ) -> None:
+        """A raced row cannot turn a verified MP4 into another asset's local copy."""
+        from gflow_cli.api.transports.migrated_recover import RecoveredClip
+
+        media_id = "b23e4567-e89b-12d3-a456-426614174000"
+        project_id = "923e4567-e89b-12d3-a456-426614174000"
+        written = tmp_path / f"{media_id}.mp4"
+        written.write_bytes(MP4)
+
+        class _Client:
+            page = object()
+
+            async def __aenter__(self) -> _Client:
+                return self
+
+            async def __aexit__(self, *_: object) -> None:
+                return None
+
+        async def _fake_recover(_page: Any, **_kwargs: Any) -> RecoveredClip:
+            with DataStore.open(catalog) as store:
+                assert DataRepository(store).get_asset_by_flow_media_id("alice", media_id) is None
+                DataRepository(store).upsert_asset(
+                    AssetRecord(
+                        id="raced-asset",
+                        profile_name="alice",
+                        flow_project_id=catalog_project_id,
+                        flow_media_id=media_id,
+                        flow_workflow_id="existing-workflow",
+                        flow_media_generation_id=None,
+                        kind=kind,
+                        status="ready",
+                        model="existing-model",
+                        aspect_ratio="16:9",
+                        width=1280,
+                        height=720,
+                        duration_seconds=8.0,
+                        seed=7,
+                        metadata_json={"source": "concurrent"},
+                    )
+                )
+            return RecoveredClip(
+                media_id=media_id,
+                workflow_id="observed-workflow-44",
+                path=written,
+                bytes=len(MP4),
+            )
+
+        monkeypatch.setattr("gflow_cli._cli_helpers._make_provider_dir", lambda _n: tmp_path)
+        monkeypatch.setattr("gflow_cli.api.client.FlowApiClient", lambda **_k: _Client())
+        monkeypatch.setattr("gflow_cli.api.transports.migrated_recover.recover_clip", _fake_recover)
+
+        with pytest.raises(expected_error):
+            await download_media(
+                media_id=media_id,
+                profile="alice",
+                project_id=project_id,
+                out_dir=tmp_path,
+            )
+
+        with DataStore.open(catalog) as store:
+            after = DataRepository(store).get_asset_by_flow_media_id("alice", media_id)
+        assert after is not None
+        assert after.kind is kind
+        assert after.flow_project_id == catalog_project_id
+        assert after.flow_workflow_id == "existing-workflow"
+        assert after.metadata_json == {"source": "concurrent"}
+        assert after.local_files == []
+
+    @pytest.mark.asyncio
+    async def test_rejects_a_conflicting_catalog_project_before_opening_a_browser(
+        self, catalog: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        media_id = "623e4567-e89b-12d3-a456-426614174000"
+        with DataStore.open(catalog) as store:
+            store.conn.execute(
+                "UPDATE assets SET flow_media_id = ? "
+                "WHERE profile_name = 'alice' AND flow_media_id = ?",
+                (media_id, "vid-media-alice-0"),
+            )
+            store.conn.commit()
+
+        def _boom(*_a: Any, **_k: Any) -> None:
+            raise AssertionError("a browser was launched with a conflicting project")
+
+        monkeypatch.setattr("gflow_cli._cli_helpers._make_provider_dir", _boom)
+
+        with pytest.raises(DataStoreError, match="conflicts with the catalog"):
+            await download_media(
+                media_id=media_id,
+                profile="alice",
+                project_id="523e4567-e89b-12d3-a456-426614174000",
+                out_dir=tmp_path,
+            )
+
+        with DataStore.open(catalog) as store:
+            after = DataRepository(store).get_asset_by_flow_media_id("alice", media_id)
+        assert after is not None
+        assert after.flow_project_id == "flow-proj-alice-000"
+
+    @pytest.mark.asyncio
+    async def test_recovery_failure_does_not_create_a_catalog_asset(
+        self, catalog: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from gflow_cli.exceptions import WireFormatError
+
+        media_id = "623e4567-e89b-12d3-a456-426614174000"
+
+        class _Client:
+            page = object()
+
+            async def __aenter__(self) -> _Client:
+                return self
+
+            async def __aexit__(self, *_: object) -> None:
+                return None
+
+        async def _fail_recovery(*_a: Any, **_k: Any) -> Any:
+            raise WireFormatError(detail="Flow did not return a verified clip")
+
+        monkeypatch.setattr("gflow_cli._cli_helpers._make_provider_dir", lambda _n: tmp_path)
+        monkeypatch.setattr("gflow_cli.api.client.FlowApiClient", lambda **_k: _Client())
+        monkeypatch.setattr(
+            "gflow_cli.api.transports.migrated_recover.recover_clip", _fail_recovery
+        )
+
+        with pytest.raises(WireFormatError, match="verified clip"):
+            await download_media(
+                media_id=media_id,
+                profile="alice",
+                project_id="723e4567-e89b-12d3-a456-426614174000",
+                out_dir=tmp_path,
+            )
+
+        with DataStore.open(catalog) as store:
+            assert DataRepository(store).get_asset_by_flow_media_id("alice", media_id) is None
+
+    @pytest.mark.asyncio
+    async def test_mcp_project_field_reaches_the_shared_download_service(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from gflow_cli.mcp import tools as mcp_tools
+
+        project_id = "823e4567-e89b-12d3-a456-426614174000"
+        seen: dict[str, Any] = {}
+
+        async def _fake_download(**kwargs: Any) -> DownloadedMedia:
+            seen.update(kwargs)
+            return DownloadedMedia(
+                media_id=kwargs["media_id"],
+                workflow_id="wf-1",
+                profile_name="alice",
+                project_id=project_id,
+                path=Path("clip.mp4"),
+                bytes=123,
+            )
+
+        monkeypatch.setattr("gflow_cli.mcp.tools.download_media", _fake_download)
+
+        result = await mcp_tools.gflow_download_media(
+            media_id="923e4567-e89b-12d3-a456-426614174000",
+            profile="alice",
+            project=project_id,
+        )
+
+        assert result["status"] == "ok"
+        assert seen["project_id"] == project_id
+
     @pytest.mark.asyncio
     async def test_refuses_a_row_with_no_project_id(
         self, catalog: Path, monkeypatch: pytest.MonkeyPatch

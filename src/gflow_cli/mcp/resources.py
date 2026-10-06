@@ -47,8 +47,8 @@ async def mcp_guide() -> str:
 # gflow-cli MCP Agent Guide (no-spend mode)
 
 This server runs in NO-SPEND mode: the credit-spending generate tools
-(`gflow_generate_image`, `gflow_generate_video`) are NOT registered and any
-call to them fails as an unknown tool. Do not attempt generation; tell the
+(`gflow_generate_image`, `gflow_generate_video`, `gflow_generate_video_batch`)
+are NOT registered; calls fail as unknown tools. Do not attempt generation; tell the
 user to restart the server without --no-spend / GFLOW_MCP_NO_SPEND to enable
 it.
 
@@ -90,6 +90,16 @@ Generate videos using Google's Veo model.
 Credit-free, non-interactive Flow session probe — call it before a generate
 tool to fail fast on expired auth. Login itself is CLI-only.
 
+### gflow_generate_video_batch
+Run 1–4 supplied-image i2v/r2v shots in one existing project, sequentially.
+Use dry_run=true first. Local input paths belong to the server. The native
+tool returns on completion; preserve state_path/out_dir and exact inputs to resume.
+Never retry an indeterminate submit. catalog_pending does not invalidate completed files.
+
+### gflow_download_media
+Recover an existing clip, without generation. If missing from the catalog,
+supply its actual media_id, project UUID and profile; content hashes are not media IDs.
+
 ### gflow_list_projects
 Browse the local project catalog.
 
@@ -101,8 +111,8 @@ List available gflow prompt tools (name, title, description, category).
 2. **One generation at a time.** The rate limiter allows bursts of 8 but throttles sustained use.
 3. **Check auth first.** If a tool returns an auth error, advise the user to
    run `gflow auth login --browser chrome`.
-4. **Credits cost money.** Always confirm with the user before generating,
-   especially video (20 credits each).
+4. **Generation uses account credits.** Confirm the intended shot with the user;
+   cost depends on the model/settings/tier, not a fixed per-video amount.
 """
 
 

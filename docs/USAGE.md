@@ -618,7 +618,8 @@ All prompts in a batch share one Flow project. The editor is opened once and sta
 > (`--end-frame`, first+last interpolation). The **default is `veo-lite`** (not
 > Flow's UI default) because it is the cheapest, not because of any capability
 > edge. `--model omni-flash` additionally unlocks `--duration 10` for i2v.
-> History: omni-flash was excluded from i2v entirely after a 2026-05-30 wire
+> **Historical upstream evidence, not this fork's new-generation acceptance:**
+> omni-flash was excluded from i2v entirely after a 2026-05-30 wire
 > capture showed Flow silently dropping the frames and billing the run as
 > text-to-video. A 2026-08-03 route-aborted re-capture
 > (`scripts/dev/capture_i2v_intercept_submit.py --model omni-flash
@@ -808,12 +809,15 @@ gflow video t2v "establishing shot" --project PROJ123
 gflow video t2v "close-up reaction" --project PROJ123
 ```
 
-## Batch video generation (shell loop)
+## Batch video generation
 
-`gflow video` has no `batch` subcommand — a manifest-driven video runner
-was scaffolded early on but never worked and was removed. `gflow image
-batch` (manifest-driven image generation) is unaffected and still ships. For
-video, drive sequential generations through a plain shell loop instead.
+AutoFlow provides `gflow video batch shots.json` and native MCP
+`gflow_generate_video_batch` for 1–4 supplied-image i2v/r2v shots in one existing
+project. Validate with `--dry-run` first. The shared runner uses a durable ledger,
+verifies completed artifacts and stops on uncertain outcomes without regeneration.
+See [VIDEO_BATCH](VIDEO_BATCH.md) for the manifest and safe resume contract.
+
+For text-only shots, the upstream single-shot commands can still be called sequentially.
 Without `--project`, each `gflow video t2v` / `i2v` / `r2v` call opens its
 **own Flow project**, so the resulting videos will NOT share a `project_id`
 (unlike `gflow image batch`, which mounts one project across all prompts) —
@@ -835,7 +839,7 @@ Get-Content prompts.txt | ForEach-Object {
 }
 ```
 
-The trade-off vs. a manifest runner: separate `project_id`s mean each
+The trade-off vs. the supplied-image batch runner: separate `project_id`s mean each
 generation re-mints a reCAPTCHA (a few extra seconds per shot) and the
 videos won't appear together in your Flow gallery. The same pattern works
 for `gflow video i2v <image> "<prompt>"` and
@@ -1371,7 +1375,7 @@ bare `Unexpected error` it used to raise
 costs nothing: each attempt asks Flow for a fresh signed link.
 
 ```text
-gflow data download MEDIA_ID [--out DIR] [--profile NAME] [--json]
+gflow data download MEDIA_ID [--out DIR] [--profile NAME] [--project UUID] [--json]
 
 Arguments:
   MEDIA_ID              Flow media UUID of the asset to fetch. [required]
@@ -1380,7 +1384,9 @@ Options:
   --out DIR             Directory to write into.
                         Default: $GFLOW_CLI_OUTPUT_DIR.
   --profile NAME        Scope the catalog lookup to a specific profile.
-                        Default: search all profiles.
+                        Required with --project for a missing catalog row.
+  --project UUID        Existing Flow project for a clip absent from the catalog.
+                        Requires --profile; does not generate media.
   --json                Emit a JSON summary instead of a table.
 ```
 
@@ -1407,9 +1413,12 @@ $ gflow data download 9ad33c78-5762-4cbc-bcbe-07a4c3b061c7
 └────────────┴──────────────────────────────────────┘
 ```
 
-Exits 16 when the catalog has no row for the media ID (or the ID exists under several
-profiles — pass `--profile` to disambiguate), and 7 when Flow does not report a usable
-media URL for it, which is also what you get for a clip that has been moved to trash.
+If the catalog has no row, supply both `--project PROJECT_UUID` and `--profile NAME`
+to recover the already-generated clip. Only verified downloads are cataloged; conflicting
+profile/project/kind records are refused. Without those explicit inputs a missing row
+still exits 16. An ID under several profiles is refused unless scoped with `--profile`.
+Exit 7 means Flow did not report a usable media URL, for example a trashed clip.
+Native MCP uses `gflow_download_media(media_id, out_dir, profile, project)`.
 
 See [#865](https://github.com/ffroliva/gflow-cli/issues/865) and
 [#871](https://github.com/ffroliva/gflow-cli/issues/871).
@@ -1746,7 +1755,7 @@ independent of the output channel.
 
 Model Context Protocol server for IDE/agent integration. Full reference: [MCP.md](MCP.md).
 
-- **`gflow mcp run [--profile NAME] [--no-spend]`** — start the MCP server over **stdio** (Claude Desktop, Cursor, VS Code). Auto-selects your default profile; pin one with `--profile` or `GFLOW_CLI_PROFILE`. `--no-spend` (#496) never registers the two credit-spending tools (`gflow_generate_image`, `gflow_generate_video`), so a connected agent cannot even see them in `tools/list` — read-only tools stay available. `GFLOW_MCP_NO_SPEND=1` does the same and also covers `gflow serve` (which takes the same flag). See [CONFIGURATION § GFLOW_MCP_NO_SPEND](CONFIGURATION.md#gflow_mcp_no_spend).
+- **`gflow mcp run [--profile NAME] [--no-spend]`** — start the MCP server over **stdio** (Claude Desktop, Cursor, VS Code). Auto-selects your default profile; pin one with `--profile` or `GFLOW_CLI_PROFILE`. `--no-spend` (#496) never registers the three generation tools (`gflow_generate_image`, `gflow_generate_video`, `gflow_generate_video_batch`), so a connected agent cannot even see them in `tools/list` — read-only tools stay available. `GFLOW_MCP_NO_SPEND=1` does the same and also covers `gflow serve` (which takes the same flag). See [CONFIGURATION § GFLOW_MCP_NO_SPEND](CONFIGURATION.md#gflow_mcp_no_spend).
 - **`gflow mcp setup [--target claude-desktop|cursor|vscode]`** — write the gflow server entry into the target client's config. Non-destructive: existing content is merged, an existing `gflow`/`gflow-cli` entry is left untouched ("Already configured"), a pre-existing file is backed up once as `<name>.gflow-backup`, and a corrupt config fails loud (exit 11) without being modified. See [MCP.md § Setup Instructions](MCP.md#4-setup-instructions).
 
 For MCP over HTTP, see `gflow serve` and [MCP.md](MCP.md).

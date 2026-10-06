@@ -83,6 +83,14 @@ def _steps(doc: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def test_fork_cannot_run_upstream_publish_jobs() -> None:
+    """AutoFlow source tags must not enter upstream's PyPI/registry publish lane."""
+    jobs = _load(WORKFLOWS / "release.yml")["jobs"]
+    for name in ("build-and-publish", "mcp-registry"):
+        condition = jobs[name].get("if", "")
+        assert "github.repository == 'ffroliva/gflow-cli'" in condition
+
+
 def _workflow_audit_commands() -> str:
     """The shell commands ci.yml's ``workflow-audit`` job runs, joined."""
     ci = _load(WORKFLOWS / "ci.yml")
