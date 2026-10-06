@@ -93,6 +93,10 @@ For a clip that already exists but is absent from the local catalog, call
 `gflow_download_media` with the actual `media_id`, explicit `project` and `profile`.
 This downloads and catalogs existing media; it does not generate or spend credits.
 Content hashes are not Flow media IDs. Wrong account/project/kind conflicts are refused.
+Fresh catalogs register the actual resolved profile before storing the recovered
+asset; they do not invent project metadata. Batch ledger lock sidecars must be
+regular, non-symlink, single-link files; unsafe sidecars are refused, not repaired
+or followed automatically.
 
 ## macOS background mode
 
@@ -108,13 +112,17 @@ from Google automation restrictions or account enforcement is promised.
 - Real-work existing-video recovery passed on macOS and through a remote native
   MCP consumer: outputs matched the original bytes/hashes and H264/AAC 720×1280,
   8-second metadata. No media was generated for those tests.
+- A separate opt-in uncatalogued-media recovery regression passed against a fresh
+  temporary catalog and verified an existing clip's exact bytes/hash. The repaired
+  offline suite passed 4,948 tests with 7 documented skips and 92.47% coverage.
 - Offline tests cover null-step responses, empty mention pickers, numeric/Thai
   duration controls, background-window safety, batch resume, catalog reconciliation
   and CLI/MCP parity. Live pre-submit 10-second i2v settings readback passed.
 - **Not yet established:** a newly generated 10-second clip, all inherited Flow
   capabilities, new-user account coverage, or production stability. The intended
-  production test is waiting for approval of an exact unfinished project shot;
-  completed/unknown-outcome shots must not be regenerated merely to release code.
+  production test received exact one-shot approval but returned an indeterminate
+  outcome. Output and credit attribution remain unresolved; completed or
+  unknown-outcome shots must not be regenerated merely to release code.
 - No stable tag, PyPI publishing, registry publishing, unattended retries or
   quota/credit guarantees are part of this source preview.
 - The fork retains token-free CI security checks and Python tests. Upstream's

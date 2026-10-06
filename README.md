@@ -139,7 +139,7 @@ Codex users: `codex plugin marketplace add .` then `codex plugin add gflow@gflow
 
 Onboard any agent in one line. Paste this into your agent of choice:
 
-> *"Read [AGENTS.md](https://github.com/ffroliva/gflow-cli/blob/main/AGENTS.md) and [docs/INDEX.md](https://github.com/ffroliva/gflow-cli/blob/main/docs/INDEX.md), then help me with my Flow batch."*
+> *"Read AutoFlow's [AGENTS.md](https://github.com/Grunte12/AutoFlow/blob/feature/autoflow-preview/AGENTS.md) and [docs/INDEX.md](https://github.com/Grunte12/AutoFlow/blob/feature/autoflow-preview/docs/INDEX.md), then help me with my Flow batch."*
 
 ## Architecture & current limitations
 

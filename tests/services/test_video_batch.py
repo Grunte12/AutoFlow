@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -91,6 +92,68 @@ async def run(manifest, tmp_path, **kwargs):
         out_dir=tmp_path / "out",
         **kwargs,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Creating symlinks may require Windows privileges")
+async def test_symlinked_zero_byte_ledger_lock_is_rejected_before_generation(
+    manifest, tmp_path, client
+):
+    state_path = tmp_path / "batch-state.json"
+    empty_target = tmp_path / "empty-target"
+    empty_target.write_bytes(b"")
+    lock_path = state_path.with_suffix(state_path.suffix + ".lock")
+    lock_path.symlink_to(empty_target)
+
+    with pytest.raises(ConfigurationError, match="ledger lock"):
+        await run(manifest, tmp_path, state_path=state_path)
+
+    assert empty_target.read_bytes() == b""
+    assert lock_path.is_symlink()
+    client.factory.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_hard_linked_zero_byte_ledger_lock_is_rejected_before_generation(
+    manifest, tmp_path, client
+):
+    state_path = tmp_path / "batch-state.json"
+    empty_target = tmp_path / "empty-target"
+    empty_target.write_bytes(b"")
+    lock_path = state_path.with_suffix(state_path.suffix + ".lock")
+    os.link(empty_target, lock_path)
+
+    with pytest.raises(ConfigurationError, match="ledger lock"):
+        await run(manifest, tmp_path, state_path=state_path)
+
+    assert empty_target.read_bytes() == b""
+    assert lock_path.stat().st_nlink == 2
+    client.factory.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFOs are not supported on this platform")
+async def test_fifo_ledger_lock_is_rejected_before_generation(manifest, tmp_path, client):
+    state_path = tmp_path / "batch-state.json"
+    lock_path = state_path.with_suffix(state_path.suffix + ".lock")
+    os.mkfifo(lock_path)
+
+    with pytest.raises(ConfigurationError, match="ledger lock"):
+        await run(manifest, tmp_path, state_path=state_path)
+
+    assert lock_path.is_fifo()
+    client.factory.assert_not_called()
+
+
+def test_existing_regular_ledger_lock_is_preserved(tmp_path):
+    state_path = tmp_path / "batch-state.json"
+    lock_path = state_path.with_suffix(state_path.suffix + ".lock")
+    lock_path.write_bytes(b"existing lock")
+
+    with video_batch._ledger_lock(state_path):
+        assert lock_path.read_bytes() == b"existing lock"
+
+    assert lock_path.read_bytes() == b"existing lock"
 
 
 def _catalog_counts(path: Path, media_id: str = "media") -> tuple[int, int, int]:

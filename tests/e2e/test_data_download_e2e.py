@@ -18,12 +18,16 @@ Opt-in: ``-m e2e_data`` with ``GFLOW_CLI_E2E_PROFILE`` set.
 
 from __future__ import annotations
 
+import hashlib
 import os
+import re
+from collections.abc import Iterator
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
-from gflow_cli.config import get_settings
+from gflow_cli.config import Settings, get_settings, reset_settings
 from gflow_cli.data.queries import VideoRow, list_videos
 from gflow_cli.data.repository import DataRepository
 from gflow_cli.data.store import DataStore
@@ -121,3 +125,136 @@ async def test_download_reports_an_unknown_media_id_as_a_catalog_miss(
             profile=profile,
             out_dir=None,
         )
+
+
+@pytest.fixture
+def operator_recovery_profile_dir(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """Use only an operator-selected existing profile home for this recovery test."""
+    profile_name = os.environ.get("GFLOW_CLI_E2E_PROFILE", "").strip()
+    home_value = os.environ.get("GFLOW_CLI_E2E_RECOVERY_HOME", "").strip()
+    if not profile_name or not home_value:
+        pytest.skip(
+            "set GFLOW_CLI_E2E_PROFILE and GFLOW_CLI_E2E_RECOVERY_HOME to select "
+            "an existing authenticated profile home"
+        )
+
+    supplied_home = Path(home_value)
+    assert supplied_home.is_absolute(), "GFLOW_CLI_E2E_RECOVERY_HOME must be an absolute path"
+    try:
+        canonical_home = supplied_home.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise AssertionError(f"GFLOW_CLI_E2E_RECOVERY_HOME must exist: {exc}") from exc
+    assert supplied_home == canonical_home, (
+        "GFLOW_CLI_E2E_RECOVERY_HOME must be canonical (resolved, not a symlink)"
+    )
+    assert canonical_home.is_dir(), "GFLOW_CLI_E2E_RECOVERY_HOME must be a directory"
+
+    recovery_settings = Settings(_env_file=None, home=canonical_home)  # pyright: ignore[reportCallIssue]
+    requested_profile = recovery_settings.profile_subdir(profile_name)
+    try:
+        existing_profile = requested_profile.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise AssertionError(f"selected profile directory does not exist: {exc}") from exc
+    expected_profile = canonical_home / f"profile_{profile_name}"
+    assert existing_profile == expected_profile and existing_profile.parent == canonical_home, (
+        "GFLOW_CLI_E2E_PROFILE must name a direct profile under the selected home"
+    )
+    assert existing_profile.is_dir(), f"selected profile is not a directory: {existing_profile}"
+
+    # Redirect only this test's live browser client; the DB remains the autouse/tmp_path DB.
+    monkeypatch.setenv("GFLOW_CLI_HOME", str(canonical_home))
+    reset_settings()
+    try:
+        settings = get_settings()
+        assert settings.home.resolve() == canonical_home
+        assert settings.profile_subdir(profile_name).resolve(strict=True) == existing_profile
+        yield existing_profile
+    finally:
+        reset_settings()
+
+
+async def test_download_recovers_an_operator_selected_uncatalogued_clip(
+    operator_recovery_profile_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Recover one explicitly selected, already-generated clip into a fresh catalog.
+
+    This is a zero-credit live proof of the explicit-project path. It never reads,
+    writes, or cleans the user's catalog: the media/project/profile/hash must all be
+    supplied by the operator, and this test's catalog and output live under tmp_path.
+
+    Opt in with GFLOW_CLI_E2E_PROFILE and GFLOW_CLI_E2E_RECOVERY_HOME plus:
+    GFLOW_CLI_E2E_RECOVERY_MEDIA_ID, GFLOW_CLI_E2E_RECOVERY_PROJECT_ID, and
+    GFLOW_CLI_E2E_RECOVERY_EXPECTED_SHA256. Do not point this at a clip that has not
+    already been generated; this test only downloads an existing asset.
+    """
+    media_id_raw = os.environ.get("GFLOW_CLI_E2E_RECOVERY_MEDIA_ID", "").strip()
+    project_id_raw = os.environ.get("GFLOW_CLI_E2E_RECOVERY_PROJECT_ID", "").strip()
+    expected_sha256 = os.environ.get("GFLOW_CLI_E2E_RECOVERY_EXPECTED_SHA256", "").strip().lower()
+    if not media_id_raw or not project_id_raw or not expected_sha256:
+        pytest.skip(
+            "set GFLOW_CLI_E2E_RECOVERY_MEDIA_ID, "
+            "GFLOW_CLI_E2E_RECOVERY_PROJECT_ID, and "
+            "GFLOW_CLI_E2E_RECOVERY_EXPECTED_SHA256 to opt in with a known existing clip"
+        )
+
+    assert re.fullmatch(r"[0-9a-f]{64}", expected_sha256), (
+        "GFLOW_CLI_E2E_RECOVERY_EXPECTED_SHA256 must be a 64-character SHA-256 hex digest"
+    )
+    media_id = str(UUID(media_id_raw))
+    project_id = str(UUID(project_id_raw))
+    profile = os.environ["GFLOW_CLI_E2E_PROFILE"].strip()
+    assert operator_recovery_profile_dir == get_settings().profile_subdir(profile).resolve()
+
+    # Override the test harness's already-temporary DB with a named, dedicated DB.
+    # Do not use real_catalog: this path specifically proves recovery from no row.
+    isolated_db = tmp_path / "recovery-catalog.sqlite"
+    monkeypatch.setenv("GFLOW_CLI_DB_PATH", str(isolated_db))
+    reset_settings()
+    db_path = get_settings().resolved_db_path()
+    assert db_path.resolve() == isolated_db.resolve()
+    assert not db_path.exists(), "fresh recovery catalog unexpectedly already exists"
+
+    with DataStore.open(db_path) as store:
+        assert DataRepository(store).get_asset_by_flow_media_id(profile, media_id) is None
+
+    from gflow_cli.services.media_recovery import download_media
+
+    output_dir = tmp_path / "recovered"
+    result = await download_media(
+        media_id=media_id,
+        profile=profile,
+        project_id=project_id,
+        out_dir=output_dir,
+    )
+
+    assert result.media_id == media_id
+    assert result.project_id == project_id
+    assert result.profile_name == profile
+    assert result.workflow_id, "no workflow id: the status record never arrived"
+    assert result.path.is_file(), f"reported {result.path} but nothing was written"
+    body = result.path.read_bytes()
+    actual_sha256 = hashlib.sha256(body).hexdigest()
+    assert len(body) == result.bytes
+    assert body[4:8] == b"ftyp", f"not an MP4: {body[:8].hex()}"
+    assert len(body) > 100_000, f"implausibly small for an 8s clip: {len(body)} B"
+    assert actual_sha256 == expected_sha256, (
+        "recovered bytes differ from the operator's known asset"
+    )
+
+    # Reopen the throwaway catalog so this proves persistence, not just an in-memory result.
+    with DataStore.open(db_path) as store:
+        asset = DataRepository(store).get_asset_by_flow_media_id(profile, media_id)
+    assert asset is not None
+    assert asset.profile_name == profile
+    assert asset.flow_project_id == project_id
+    assert asset.flow_workflow_id == result.workflow_id
+    assert asset.kind.value == "video"
+    local_file = next(
+        (item for item in asset.local_files if item.path == result.path),
+        None,
+    )
+    assert local_file is not None, f"reopened catalog does not record {result.path}"
+    assert local_file.bytes == len(body)
+    assert local_file.sha256 == expected_sha256

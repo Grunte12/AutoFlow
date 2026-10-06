@@ -118,6 +118,84 @@ class TestRecordLocalFile:
 
 class TestDownloadMedia:
     @pytest.mark.asyncio
+    async def test_uncatalogued_recovery_records_into_a_fresh_sqlite_catalog(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A real empty SQLite catalog still needs the profile FK parent."""
+        from gflow_cli.api.transports.migrated_recover import RecoveredClip
+        from gflow_cli.config import reset_settings
+
+        db = tmp_path / "fresh-catalog.db"
+        with DataStore.open(db):
+            pass
+        monkeypatch.setenv("GFLOW_CLI_DB_PATH", str(db))
+        reset_settings()
+
+        media_id = "123e4567-e89b-12d3-a456-426614174000"
+        project_id = "223e4567-e89b-12d3-a456-426614174000"
+        profile = "fresh-profile"
+        written = tmp_path / "out" / f"{media_id}.mp4"
+        written.parent.mkdir(parents=True)
+        written.write_bytes(MP4)
+
+        class _Client:
+            page = object()
+
+            async def __aenter__(self) -> _Client:
+                return self
+
+            async def __aexit__(self, *_: object) -> None:
+                return None
+
+        async def _fake_recover(_page: Any, **kwargs: Any) -> RecoveredClip:
+            assert kwargs["project_id"] == project_id
+            assert kwargs["media_id"] == media_id
+            with DataStore.open(db) as store:
+                assert store.conn.execute("SELECT 1 FROM profiles LIMIT 1").fetchone() is None
+                assert DataRepository(store).get_asset_by_flow_media_id(profile, media_id) is None
+            return RecoveredClip(
+                media_id=media_id,
+                workflow_id="observed-fresh-workflow",
+                path=written,
+                bytes=len(MP4),
+            )
+
+        monkeypatch.setattr("gflow_cli._cli_helpers._make_provider_dir", lambda _name: tmp_path)
+        monkeypatch.setattr("gflow_cli.api.client.FlowApiClient", lambda **_kwargs: _Client())
+        monkeypatch.setattr("gflow_cli.api.transports.migrated_recover.recover_clip", _fake_recover)
+
+        result = await download_media(
+            media_id=media_id,
+            profile=profile,
+            project_id=project_id,
+            out_dir=tmp_path / "out",
+        )
+
+        assert result.media_id == media_id
+        assert result.project_id == project_id
+        assert result.profile_name == profile
+        assert result.workflow_id == "observed-fresh-workflow"
+        with DataStore.open(db) as store:
+            profile_row = store.conn.execute(
+                "SELECT name, profile_dir FROM profiles WHERE name = ?", (profile,)
+            ).fetchone()
+            asset = DataRepository(store).get_asset_by_flow_media_id(profile, media_id)
+            project_row = store.conn.execute(
+                "SELECT 1 FROM projects WHERE profile_name = ? AND flow_project_id = ?",
+                (profile, project_id),
+            ).fetchone()
+
+        assert profile_row is not None
+        assert tuple(profile_row) == (profile, str(tmp_path))
+        assert project_row is None  # no title, source, or creation date was invented
+        assert asset is not None
+        assert asset.flow_project_id == project_id
+        assert asset.flow_workflow_id == "observed-fresh-workflow"
+        local_file = next(item for item in asset.local_files if item.path == written)
+        assert local_file.bytes == len(MP4)
+        assert local_file.sha256 == hashlib.sha256(MP4).hexdigest()
+
+    @pytest.mark.asyncio
     async def test_recovers_an_uncatalogued_clip_with_an_explicit_project(
         self, catalog: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -130,6 +208,13 @@ class TestDownloadMedia:
         written.parent.mkdir(parents=True)
         written.write_bytes(MP4)
         browser_profiles: list[str] = []
+        original_first_seen = "2026-01-02T03:04:05Z"
+        with DataStore.open(catalog) as store:
+            store.conn.execute(
+                "UPDATE profiles SET profile_dir = ?, first_seen_at = ? WHERE name = ?",
+                ("/old/profile/path", original_first_seen, "alice"),
+            )
+            store.conn.commit()
 
         class _Client:
             page = object()
@@ -173,6 +258,9 @@ class TestDownloadMedia:
         assert browser_profiles == ["alice"]
         with DataStore.open(catalog) as store:
             after = DataRepository(store).get_asset_by_flow_media_id("alice", media_id)
+            profile_row = store.conn.execute(
+                "SELECT profile_dir, first_seen_at FROM profiles WHERE name = 'alice'"
+            ).fetchone()
             row = store.conn.execute(
                 "SELECT kind, status, model, aspect_ratio, width, height, duration_seconds, seed "
                 "FROM assets WHERE profile_name = ? AND flow_media_id = ?",
@@ -182,6 +270,8 @@ class TestDownloadMedia:
         assert after.flow_project_id == project_id
         assert after.flow_workflow_id == "observed-workflow-42"
         assert written in [f.path for f in after.local_files]
+        assert profile_row is not None
+        assert tuple(profile_row) == (str(tmp_path), original_first_seen)
         assert row is not None
         assert tuple(row) == ("video", "ready", None, None, None, None, None, None)
 

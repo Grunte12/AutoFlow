@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and video generation. Setup uses this fork's frozen checkout, not upstream PyPI.
 - Updated locked `multidict` from 6.7.1 to 6.9.1 to address CVE-2026-104874. The
   all-extras dependency audit passes without suppressing the advisory.
+- Existing-media recovery now records its resolved profile parent in a fresh
+  catalog before inserting the asset, preventing a foreign-key failure after a
+  successful download. An opt-in uncatalogued-media regression uses a temporary
+  catalog/output and verifies an operator-supplied existing clip hash.
+- Video-batch lock sidecars reject symlinks, hard links and special files before
+  writing. Fork onboarding and the command synopsis now point to AutoFlow and
+  distinguish read-only queries from downloads and other mutating data commands.
 
 This is a source preview, not a stable release or proof of fresh 10-second output.
 

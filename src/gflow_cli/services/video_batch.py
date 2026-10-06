@@ -7,6 +7,7 @@ import json
 import mimetypes
 import os
 import re
+import stat
 import tempfile
 import uuid
 from collections.abc import Generator
@@ -258,8 +259,51 @@ def _ledger_lock(path: Path) -> Generator[None]:
     lock.parent.mkdir(parents=True, exist_ok=True)
     if lock in _HELD_LOCKS:
         raise ConfigurationError("Video batch ledger is already in use.", route="video.batch")
-    fd = os.open(lock, os.O_CREAT | os.O_RDWR, 0o600)
+
+    # Inspect before opening so FIFOs and other special files are rejected
+    # without risking a blocking open. O_NONBLOCK closes the race on platforms
+    # that support it; O_NOFOLLOW prevents the final path component from
+    # changing into a symlink between inspection and open.
     try:
+        existing = lock.lstat()
+    except FileNotFoundError:
+        existing = None
+    except OSError:
+        raise ConfigurationError(
+            "Video batch ledger lock cannot be inspected safely.", route="video.batch"
+        ) from None
+    if existing is not None and not stat.S_ISREG(existing.st_mode):
+        raise ConfigurationError(
+            "Video batch ledger lock must be a regular non-symlink file.",
+            route="video.batch",
+        )
+
+    flags = os.O_CREAT | os.O_RDWR
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        fd = os.open(lock, flags, 0o600)
+    except OSError:
+        raise ConfigurationError(
+            "Video batch ledger lock cannot be opened safely.", route="video.batch"
+        ) from None
+    try:
+        try:
+            descriptor_stat = os.fstat(fd)
+            current = lock.lstat()
+        except OSError:
+            raise ConfigurationError(
+                "Video batch ledger lock changed while opening.", route="video.batch"
+            ) from None
+        if (
+            not stat.S_ISREG(descriptor_stat.st_mode)
+            or descriptor_stat.st_nlink != 1
+            or not stat.S_ISREG(current.st_mode)
+            or not os.path.samestat(descriptor_stat, current)
+        ):
+            raise ConfigurationError(
+                "Video batch ledger lock must be a regular non-symlink file.",
+                route="video.batch",
+            )
         if os.fstat(fd).st_size == 0:
             os.write(fd, b"\0")
         try:

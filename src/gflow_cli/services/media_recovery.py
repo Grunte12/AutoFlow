@@ -219,6 +219,7 @@ async def download_media(
             project_id=route_project_id,
             media_id=media_id,
             workflow_id=clip.workflow_id,
+            profile_dir=profile_dir,
             path=clip.path,
             size=clip.bytes,
         )
@@ -244,12 +245,23 @@ async def download_media(
 
 
 def _record_recovered_asset(
-    *, profile: str, project_id: str, media_id: str, workflow_id: str, path: Path, size: int
+    *,
+    profile: str,
+    project_id: str,
+    media_id: str,
+    workflow_id: str,
+    profile_dir: Path,
+    path: Path,
+    size: int,
 ) -> None:
     """Persist only identifiers observed or supplied for a verified recovered clip."""
     settings = get_settings()
     with DataStore.open(settings.resolved_db_path()) as store:
         repo = DataRepository(store)
+        # Assets reference a profile row even when the recovered media itself was
+        # missing from this machine's catalog. This is the same profile upsert used
+        # by generation recording, with the actual resolved profile directory.
+        repo.upsert_profile(profile, profile_dir)
         asset = repo.get_asset_by_flow_media_id(profile, media_id)
         if asset is not None:
             with store.transaction(immediate=True):

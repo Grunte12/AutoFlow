@@ -32,6 +32,7 @@ Commands:
     i2v                         Generate a video from an initial frame + motion prompt.
     r2v                         Generate a video from reference images + prompt.
     chain                       Render a JSONL manifest as a last-frame I2V chain.
+    batch MANIFEST              Run supplied-image shots in one existing project (may spend credits).
 
   scene     Compose Flow Scenes (Add Clip) — credit-free REST.
     create                      Compose ordered, trimmable clips into a scene (optional extended .mp4).
@@ -44,9 +45,10 @@ Commands:
     rm                          Delete a character by --id or --name (FREE).
     voices                      List the preset Gemini voices for character TTS.
 
-  data      Local provenance database (read-only queries).
-    media MEDIA_ID              Show stored record for a Flow media ID.
-    list {projects,images,videos,profiles}  Browse the catalog.
+  data      Local provenance catalog, media recovery, and maintenance.
+    media MEDIA_ID              Show stored record for a Flow media ID (read-only).
+    list {projects,images,videos,profiles}  Browse the catalog (read-only).
+    download MEDIA_ID           Recover an already-generated video (no generation).
     prune                       Remove stale local file entries.
 
   credits   Inspect current Flow balances (user / list).

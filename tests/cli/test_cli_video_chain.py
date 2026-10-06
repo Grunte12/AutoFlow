@@ -397,9 +397,11 @@ def test_chain_wires_operation_recorder_and_records_each_link(tmp_path: Path) ->
         patch("gflow_cli.cli_video.OperationRecorder.open", return_value=op_recorder),
         patch.dict(_real_run_chain.__kwdefaults__, {"extractor": _fake_extract}),
     ):
-        result = runner.invoke(video, ["chain", str(manifest), "--yes"])
+        # Keep frame-extraction fixtures out of the operator's Downloads.
+        result = runner.invoke(video, ["chain", str(manifest), "--out-dir", str(tmp_path), "--yes"])
 
     assert result.exit_code == 0, result.output
+    assert (tmp_path / "link0_lastframe.jpg").read_bytes() == b"\xff\xd8\xff\xd9"
 
     # An OperationRecorder was opened and closed.
     op_recorder.close.assert_called()
