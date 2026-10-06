@@ -341,3 +341,12 @@ def test_the_prerelease_classification_has_exactly_one_definition() -> None:
         "release.yml: the prerelease expression is inlined on a step as well as being a "
         "job output — one definition, or the two copies will drift"
     )
+
+
+def test_fork_does_not_analyze_under_upstream_sonar_identity() -> None:
+    jobs = _load(WORKFLOWS / "ci.yml")["jobs"]
+    assert "github.repository == 'ffroliva/gflow-cli'" in jobs["sonar"]["if"]
+    # Independent, token-free security checks remain enabled for the fork.
+    assert "if" not in jobs["secrets-scan"]
+    assert "if" not in jobs["deps-audit"]
+    assert "if" not in jobs["workflow-audit"]

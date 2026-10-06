@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### AutoFlow source preview
+
+- Native supplied-image video batches share one sequential implementation with the
+  CLI, validate all inputs before browser work, and retain durable completed outputs
+  and uncertain-submission checkpoints without automatic regeneration.
+- Existing clip recovery accepts an explicit project when the local catalog is
+  missing, validates artifact identity and preserves truthful catalog-pending state.
+- Migrated-host duration parsing accepts verified numeric UI controls, and empty
+  reference pickers cannot send Enter to the composer. macOS browser background
+  mode minimizes generation windows while leaving operator login visible.
+- No-spend MCP registration now hides batch generation as well as single image
+  and video generation. Setup uses this fork's frozen checkout, not upstream PyPI.
+- Updated locked `multidict` from 6.7.1 to 6.9.1 to address CVE-2026-104874. The
+  all-extras dependency audit passes without suppressing the advisory.
+
+This is a source preview, not a stable release or proof of fresh 10-second output.
+
 ## [0.82.1] — 2026-10-02
 
 ### Fixed

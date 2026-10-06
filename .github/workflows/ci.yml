@@ -315,9 +315,12 @@ jobs:
     # is empty there and the scanner fails before analysis. Dependabot-triggered
     # runs are the same case: GitHub serves them the separate Dependabot secrets
     # namespace, so SONAR_TOKEN is also empty even though the branch is in-repo.
-    # Keep SonarCloud on trusted pushes/internal PRs where the token is available.
+    # This project key belongs to upstream. An independent fork must provision
+    # its own Sonar project/token before enabling hosted analysis; never reuse
+    # upstream attribution or treat the skipped scan as a quality-gate pass.
     if: >
       always() &&
+      github.repository == 'ffroliva/gflow-cli' &&
       github.actor != 'dependabot[bot]' &&
       (
         github.event_name != 'pull_request' ||

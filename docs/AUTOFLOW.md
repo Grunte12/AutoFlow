@@ -117,6 +117,10 @@ from Google automation restrictions or account enforcement is promised.
   completed/unknown-outcome shots must not be regenerated merely to release code.
 - No stable tag, PyPI publishing, registry publishing, unattended retries or
   quota/credit guarantees are part of this source preview.
+- The fork retains token-free CI security checks and Python tests. Upstream's
+  SonarCloud project is not ours: its hosted analysis is disabled for this fork
+  until a separate project/token is configured. A skipped scan is not a Sonar
+  quality-gate pass or a merge-ready review.
 
 Flow's private interfaces can change. Keep local state, inspect failures, and use
 existing-media recovery first. Follow the [disclaimer](../DISCLAIMER.md) and

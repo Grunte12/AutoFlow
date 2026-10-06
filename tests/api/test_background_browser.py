@@ -11,7 +11,12 @@ from gflow_cli.api.transports.ui_automation_video import VideoGenerationMixin
 from gflow_cli.config import Settings
 
 
-def test_background_launch_has_no_startup_window(tmp_path: Path) -> None:
+def test_background_launch_has_no_startup_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Pure macOS launch-policy unit test, not a host/browser test. Linux CI
+    # models the supported platform rather than requesting an unsupported run.
+    monkeypatch.setattr("gflow_cli.background_browser.sys.platform", "darwin")
     client = FlowApiClient(profile_dir=tmp_path, settings=Settings(browser_background=True))
     kwargs = client._persistent_context_kwargs()
     assert kwargs["ignore_default_args"] is True
