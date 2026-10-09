@@ -48,8 +48,8 @@ Files: `src/gflow_cli/errors.py`, `src/gflow_cli/api/transports/migrated_compose
 - [x] Run repository quality checks and lead safety/surface review.
 - [ ] Full independent branch council / hosted CI verdict (not claimed for source preview).
 - [x] Run named live CLI/MCP and browser E2E matrix; do not treat mocks as Flow proof.
-- [ ] Push a feature branch to the owner's AutoFlow repository only.
-- [ ] Install tested changes without replacing unrelated dirty runtime files; verify the active MCP revision.
+- [x] Push a feature branch to the owner's AutoFlow repository only.
+- [x] Install tested changes without replacing unrelated dirty runtime files; verify the active MCP revision.
 
 ## Definition of done
 
@@ -106,9 +106,14 @@ the lead ran the final background scripts. A stream/file-descriptor bug in the
 MCP test harness was also repaired before the second upload.
 
 All seven version declaration sites now identify the source preview as
-`0.83.0a1`. No tag, PyPI/MCP Registry publication, push or runtime installation
-has occurred. This preview is not a stable release; version-pinned distribution
-artifacts have not been published. The two-Character authorization is exhausted.
+`0.83.0a1`. The feature branch was pushed to the owner's AutoFlow repository and
+installed into the existing local source runtime. Its CLI and live loopback MCP
+both report `0.83.0a1`; native Character import and existing video-batch tools are
+registered. Installed import regression: 82 passed. The pre-existing tracked
+patch passed reverse-apply verification, confirming local fixes remain present.
+No release tag or PyPI/MCP Registry publication occurred. This preview is not a
+stable release; version-pinned distribution artifacts have not been published.
+The initial two-Character authorization was exhausted.
 The owner approved one additional test Character. The final live BDD passed in
 96.77 seconds: real MCP import, same-UUID CLI/MCP replay, exact bindings, unchanged
 journal/source hash and fresh metadata form verification. Its public sanitized

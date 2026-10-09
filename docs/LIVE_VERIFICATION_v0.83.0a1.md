@@ -51,6 +51,16 @@ preserved rather than silently completed or recreated.
 - Duplication proxy found no findings in the changed modules; it is not a hosted
   SonarCloud verdict.
 
+## Local delivery verification
+
+Code commit `d958849f` was pushed to the owner's AutoFlow feature branch and
+applied to the existing source runtime without resetting its dirty checkout.
+The saved pre-install tracked patch passes reverse-apply verification after
+installation. Installed Character regression: 82 passed. CLI version and a
+read-only initialization/list-tools call to the existing loopback MCP daemon
+both verified `0.83.0a1`; native import and existing video-batch tools are present.
+Only the owned AutoFlow daemon was restarted, not Tincan or another relay.
+
 ## Limits
 
 Only the named native Character import/replay path is live-proven by this
