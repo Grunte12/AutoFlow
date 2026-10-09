@@ -81,6 +81,7 @@ from gflow_cli.errors import (
     FlowHostMigratedError,
     InsufficientCreditsError,
     MediaUploadRejectedError,
+    PreSubmitConfigurationError,
     ReferenceNotFoundError,
     TransportTimeoutError,
     UiSelectorDriftError,
@@ -282,6 +283,36 @@ INGREDIENTS_LIGATURE = "chrome_extension"
 #: text-to-video and bills a clip with the file NAMES typed into the prompt and none of
 #: the images on it.
 R2V_DURATION_S = 8
+
+
+def validate_migrated_video_configuration(request: GenerateVideoRequest) -> None:
+    """Apply the driver's measured R2V safety policy, without browser gestures.
+
+    This is NOT a universal Flow capability report. The 8s baseline was measured
+    with Veo Lite; other model/duration combinations require fresh binding proof.
+    Call before any generation dispatch for this operation. Never downgrade the
+    requested duration or suggest changing hosts as a capability workaround.
+    """
+    if request.mode is Mode.R2V and request.duration not in (None, R2V_DURATION_S):
+        raise PreSubmitConfigurationError(
+            detail=(
+                f"AutoFlow has not verified reference-preserving R2V at {request.duration}s "
+                "on the migrated composer. The request was refused before submission; "
+                "the requested duration was not changed. The driver's verified baseline "
+                f"is {R2V_DURATION_S}s, not proof that other lengths are absent from Flow."
+            ),
+            setting="duration",
+            requested_value=request.duration,
+            capability="unverified",
+            safe_next_action="inspect_controls",
+            route="migratedVideoConfiguration",
+            remediation_hint=(
+                "Inspect the selected model's duration and reference binding controls. "
+                "Do not retry or downgrade automatically; explicitly approve a changed request."
+            ),
+        )
+
+
 #: A mention chip in the prompt document — how a reference is represented once
 #: attached. Its ``data-reference-type`` decides which wire slot carries the id.
 MENTION_CHIP = ".mention-chip"
@@ -1429,6 +1460,7 @@ class MigratedComposer:
 
         Model goes first: like on labs.google the duration row is model-state.
         """
+        validate_migrated_video_configuration(request)
         pane = await self._open_pane(page)
         try:
             await self._select(page, pane, axis="mode", lig="videocam")
@@ -1461,21 +1493,6 @@ class MigratedComposer:
                 await self._select_model(page, pane, model)
             await self._select(page, pane, axis="aspect", lig=ASPECT_LIGATURE[request.aspect])
             if request.duration is not None:
-                if request.mode is Mode.R2V and request.duration != R2V_DURATION_S:
-                    raise ConfigurationError(
-                        detail=(
-                            f"the migrated Flow host offers reference-to-video only at "
-                            f"{R2V_DURATION_S}s; at {request.duration}s it does not refuse but "
-                            "silently drops the references and submits a text-to-video run "
-                            "with their file names typed into the prompt — a full-price clip "
-                            "with none of the images on it"
-                        ),
-                        remediation_hint=(
-                            f"Drop --duration (r2v pins {R2V_DURATION_S}s on its own), pass "
-                            f"--duration {R2V_DURATION_S}, or run this length on labs with "
-                            "GFLOW_CLI_FLOW_HOST=labs.google."
-                        ),
-                    )
                 await self._select(page, pane, axis="duration", text=f"{request.duration}s")
             elif request.mode is Mode.R2V:
                 await self._pin_r2v_duration(page, pane)

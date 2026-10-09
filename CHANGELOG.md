@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `gflow character import` and `gflow_character_import` import an original image
+  sheet through Flow's native Character form without invoking image generation.
+  A caller-supplied operation UUID is journaled before mutation; success requires
+  exact project/entity/workflow/media binding and name/personality readback.
+  Uncertain operations are reconciled, never blindly recreated or re-uploaded.
+
+### Fixed
+
+- AutoFlow's migrated R2V duration safety refusal now carries explicit pre-submit
+  proof (`submission_state`, requested setting and safe next action) through CLI
+  and native MCP errors. It retains exit 11 and forbids automatic retries. Other
+  configuration errors do not imply that a submission never happened. The refusal
+  describes the driver's evidence limit, not a universal Flow duration restriction,
+  and no longer recommends silently changing duration or forcing another host.
+
 ## [0.82.1] — 2026-10-02
 
 ### Fixed

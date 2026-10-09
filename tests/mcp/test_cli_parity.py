@@ -42,6 +42,7 @@ from gflow_cli.mcp import tools as mcp_tools
 # CLI leaf → MCP tool that covers it. One tool may cover several leaves when a
 # parameter selects the behaviour (e.g. gflow_generate_video's ``mode``).
 CLI_TO_MCP: dict[str, str] = {
+    "character import": "gflow_character_import",
     "character list": "gflow_character_list",
     "character voices": "gflow_character_voices",
     "character show": "gflow_character_show",

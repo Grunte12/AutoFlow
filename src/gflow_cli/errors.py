@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict, cast
@@ -44,6 +45,7 @@ __all__ = [
     "MediaDownloadError",
     "NetworkError",
     "OwnerEvidence",
+    "PreSubmitConfigurationError",
     "ProblemDetails",
     "ProfileAccessError",
     "QueueSchemaError",
@@ -76,6 +78,12 @@ class ProblemDetails(TypedDict, total=False):
     remediation_hint: str  # gflow extension
     route: str  # gflow extension — sanitized route name, NOT full URL
     incident: dict[str, str]  # gflow extension — remote-safe {id, capture_status} ONLY
+    submission_state: str  # transport-owned positive pre-submit proof, never inferred
+    stage: str
+    setting: str
+    requested_value: int | float | str  # finite numeric or fixed enum only
+    capability: str
+    safe_next_action: str
 
 
 class GFlowError(Exception):
@@ -459,6 +467,87 @@ class ConfigurationError(GFlowError):
         "Check that the transport name is registered via make_transport(). "
         "Run `gflow config list-transports` to see available strategies."
     )
+
+
+class PreSubmitConfigurationError(ConfigurationError):
+    """A transport positively refused configuration before its credit boundary.
+
+    Only raise while the operation is known never to have invoked a generation
+    click or dispatch. A timeout, missing response, or ordinary configuration
+    error is NOT that proof. This remains exit 11 and nonretryable: the caller
+    must inspect or change configuration, not automatically repeat the request.
+
+    Structured extensions are allowlisted and never copy detail, paths, URLs,
+    prompts, or UI text. As for other errors, free-text detail/remediation must
+    already be safe at the raise site. This does not enable incident capture.
+    """
+
+    problem_type = "https://gflow-cli.dev/errors/presubmit-configuration"
+    title = "Configuration refused before submission"
+    _default_remediation = "Inspect Flow's controls and adjust the requested configuration."
+
+    def __init__(
+        self,
+        detail: str = "",
+        *,
+        setting: str,
+        requested_value: int | float | str,
+        capability: str = "unverified",
+        safe_next_action: str = "inspect_controls",
+        instance: str | None = None,
+        route: str = "",
+        remediation_hint: str | None = None,
+    ) -> None:
+        if setting not in ("duration", "model", "references"):
+            raise ValueError("Unsupported pre-submit setting.")
+        if capability not in ("unverified", "unsupported"):
+            raise ValueError("Unsupported pre-submit capability.")
+        if safe_next_action not in ("inspect_controls", "accept_default", "adjust_request"):
+            raise ValueError("Unsupported pre-submit next action.")
+        enum_values = {
+            "duration": (),
+            "model": (
+                "veo-lite",
+                "veo-fast",
+                "veo-quality",
+                "veo-lite-lp",
+                "omni-flash",
+                "nano2",
+                "nanopro",
+            ),
+            "references": ("local_images", "character_entity"),
+        }
+        numeric = type(requested_value) in (int, float)
+        if numeric:
+            if setting == "model" or (
+                type(requested_value) is float and not math.isfinite(requested_value)
+            ):
+                raise ValueError("Unsupported pre-submit requested value.")
+        elif type(requested_value) is not str or requested_value not in enum_values[setting]:
+            raise ValueError("Unsupported pre-submit requested value.")
+        super().__init__(
+            detail,
+            instance=instance,
+            route=route,
+            remediation_hint=remediation_hint,
+            retryable=False,
+        )
+        self.setting = setting
+        self.requested_value = requested_value
+        self.capability = capability
+        self.safe_next_action = safe_next_action
+
+    def to_problem_details(self) -> ProblemDetails:
+        out = super().to_problem_details()
+        out.update(
+            submission_state="not_submitted",
+            stage="configuration",
+            setting=self.setting,
+            requested_value=self.requested_value,
+            capability=self.capability,
+            safe_next_action=self.safe_next_action,
+        )
+        return out
 
 
 class ProfileAccessError(ConfigurationError):

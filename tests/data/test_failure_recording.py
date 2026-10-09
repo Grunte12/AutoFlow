@@ -355,7 +355,11 @@ def test_all_gflow_error_slugs_unique_and_nonempty() -> None:
     for cls in _subclasses(GFlowError):
         if cls.__module__ != errors_mod.__name__:
             continue
-        error_type, _ = _classify_failure(cls("x"))
+        if cls.__name__ == "PreSubmitConfigurationError":
+            exc = cls(setting="duration", requested_value=6)
+        else:
+            exc = cls("x")
+        error_type, _ = _classify_failure(exc)
         assert error_type, f"{cls.__name__} produced an empty error_type"
         prior = slugs.get(error_type)
         # Parent/child pairs sharing a URI would collapse — only identical

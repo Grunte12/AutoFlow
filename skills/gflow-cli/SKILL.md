@@ -2,7 +2,7 @@
 name: gflow-cli
 version: "1.2"
 skillopt_epoch: 0
-description: Use when the user wants to drive Google Flow (Veo image-to-video, Veo text-to-video, Imagen / Nano Banana image generation) from the terminal or a script — including text-to-video, image-to-video, image-to-image, batch image pipelines, or spending Flow credits programmatically. The CLI is `gflow` (or `flow`); install with `uv tool install gflow-cli` or run ad-hoc with `uvx --from gflow-cli gflow ...`. Drives the real Flow web UI through a headed Chrome session (Playwright) after a one-time browser sign-in — it does not bypass the UI, it automates it.
+description: Use when the user wants to drive Google Flow from the terminal or script, including importing an existing sheet into a native Flow Character. It automates the real Flow web UI through headed Chrome; it does not bypass the UI.
 optimization_notes: |
   Known weak spots for the SkillOpt training loop (targets for epoch 1+):
   - Wrong subcommand: agents emit 'gflow video generate' / 'gflow video create' instead of 'gflow video t2v' or 'gflow video i2v'
@@ -26,7 +26,8 @@ The user wants to:
 - Generate one or many Veo videos from text prompts (T2V) or from initial frame + motion prompt (I2V)
 - Generate one or many Imagen / Nano Banana images from text (T2I) or from prompt + reference images (I2I)
 - Build a batch pipeline for video generations
-- Create a reusable, project-scoped Flow **Character** (a named subject with reference images, optional voice + personality) for consistent subjects across generations (`gflow character`)
+- Create a project-scoped Flow **Character** (a named subject with reference images, optional voice + personality) for supported identity-reference paths (`gflow character`)
+- Import an existing image sheet into a native, project-scoped Flow Character without invoking image generation (`gflow character import`)
 - Compose ordered clips into a **scene** and optionally render a credit-free server-side extended video (`gflow scene`)
 - Stitch a multi-clip story where each clip is seeded by the previous clip's last frame (`gflow video chain`)
 - Use their Flow credits via script instead of clicking through the UI
@@ -89,6 +90,9 @@ gflow video chain <manifest.jsonl> [--out-dir DIR] [--dry-run] \
 gflow character create --project <id> --name "<name>" --face-prompt "<prompt>" \
                        [--body-prompt "<prompt>"] [--voice <id>] [--personality "<text>"] \
                        [--model {nano2|nanopro}]
+gflow character import --project <id> --name "<name>" --sheet <path> \
+                       --operation-id <uuid> [--personality "<text>"] \
+                       [--profile NAME] [--json]  # original sheet; no generation
 gflow character list --project <id>
 gflow character show <character-id> --project <id>
 gflow character rm --project <id> (--id <character-id> | --name "<name>") [--yes]   # delete (FREE)
@@ -171,7 +175,7 @@ Get-ChildItem ./inputs/*.png | ForEach-Object {
 ### Create a reusable Character for consistent subjects
 
 ```bash
-# A Character is a named, project-scoped subject reused across generations.
+# A Character is a named, project-scoped subject for supported identity-reference paths.
 gflow character create --project "$PROJECT_ID" --name "Joaquim" \
   --face-prompt "weathered fisherman, grey beard, kind eyes" \
   --body-prompt "tall, broad-shouldered, wearing a navy wool sweater" \
@@ -181,6 +185,20 @@ gflow character list --project "$PROJECT_ID"
 ```
 
 See [`docs/CHARACTER.md`](https://github.com/ffroliva/gflow-cli/blob/main/docs/CHARACTER.md) for the full domain model, wire protocol, and the crash-recoverable persist-before-spend saga.
+
+### Import an original Character sheet
+
+```bash
+gflow character import --project "$PROJECT_ID" --name "Joaquim" \
+  --sheet ./character-sheet.png --operation-id "$IMPORT_OPERATION_ID"
+```
+
+Supply a fresh canonical UUID as `--operation-id`; the command journals it
+before changing Flow. Reuse that same ID only to reconcile the same import.
+An uncertain import is never automatically recreated or re-uploaded: inspect
+and resolve the original operation before starting another one. The native
+upload path does not invoke image generation. An observed upload was not billed,
+but that is not a universal Flow billing guarantee.
 
 ### Compose clips into an extended video (credit-free)
 
@@ -263,6 +281,7 @@ The `gflow-cli` supports a 3-layer pipeline for persistent generation context (A
 - **Not for production-grade SLAs.** gflow-cli reverse-engineers a private Google API. It can break without notice. For production, use the [official Gen AI SDK](https://github.com/googleapis/python-genai).
 - **Don't share auth profiles.** The Playwright profile dir lives at the per-OS user-data location (Windows: `%LOCALAPPDATA%\gflow-cli\profile_*`; macOS: `~/Library/Application Support/gflow-cli/profile_*`; Linux: `~/.local/share/gflow-cli/profile_*`) and contains Google session cookies — treat as secrets.
 - **Same profile can't run in parallel.** Chromium refuses two persistent contexts on the same profile dir; use different `--profile` names for parallel work.
+- **Character identity in video is not currently usable on the migrated driver.** It refuses `@Name`/entity references before submission until terminal attribution is verified; do not promise those references will work for video.
 - **Respect Google's [Generative AI Prohibited Use Policy](https://policies.google.com/terms/generative-ai/use-policy).** Don't generate content that would get the user's Google account banned.
 
 ## Known agent failure modes

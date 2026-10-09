@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
+from uuid import UUID
 
 import click
 import structlog
@@ -16,8 +18,8 @@ from gflow_cli.api.character import (
     CharacterCreateResult,
     CharacterImageRequest,
 )
-from gflow_cli.api.client import FlowApiClient
-from gflow_cli.config import get_settings
+from gflow_cli.api.client import FlowApiClient, validate_image_file
+from gflow_cli.config import Settings, get_settings
 from gflow_cli.data.recorder import OperationRecorder
 from gflow_cli.services.character_create import character_create
 
@@ -60,6 +62,155 @@ def _normalize_voice(value: str | None) -> str | None:
 @click.group()
 def character() -> None:
     """Manage Flow Character entities for a project."""
+
+
+def _canonical_import_uuid(value: str, option: str) -> str:
+    """Validate route/idempotency UUIDs before opening a profile or browser."""
+    try:
+        canonical = str(UUID(value))
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise click.BadParameter("must be a canonical UUID", param_hint=option) from exc
+    if value != canonical:
+        raise click.BadParameter("must be a canonical UUID", param_hint=option)
+    return canonical
+
+
+def _validated_import_sheet(path: Path) -> Path:
+    """Resolve and inspect the source image before any browser/profile startup."""
+    try:
+        resolved = path.expanduser().resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise click.BadParameter("must name an existing image file", param_hint="--sheet") from exc
+    if not resolved.is_file():
+        raise click.BadParameter("must name an image file, not a directory", param_hint="--sheet")
+    try:
+        asyncio.run(validate_image_file(resolved))
+    except (OSError, ValueError) as exc:
+        raise click.BadParameter(
+            "must be a supported image within the upload size limit", param_hint="--sheet"
+        ) from exc
+    return resolved
+
+
+# ---------------------------------------------------------------------------
+# import — existing sheet, native UI, no generation
+# ---------------------------------------------------------------------------
+
+
+@character.command("import")
+@click.option("--project", "project_id", required=True, help="Flow project UUID.")
+@click.option("--name", required=True, help="Display name for the imported character.")
+@click.option(
+    "--sheet",
+    "sheet_path",
+    required=True,
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True, path_type=Path),
+    help="Local image sheet to import; this command does not generate an image.",
+)
+@click.option(
+    "--operation-id",
+    required=True,
+    help="Caller-supplied UUID idempotency key; it is never generated or retried automatically.",
+)
+@click.option("--personality", default=None, help="Optional personality notes.")
+@click.option("--profile", default=None, help="Profile name (overrides default).")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Emit JSON output.")
+def import_character(
+    project_id: str,
+    name: str,
+    sheet_path: Path,
+    operation_id: str,
+    personality: str | None,
+    profile: str | None,
+    as_json: bool,
+) -> None:
+    """Import an original image sheet into a Flow Character without generation."""
+    project_id = _canonical_import_uuid(project_id, "--project")
+    operation_id = _canonical_import_uuid(operation_id, "--operation-id")
+    if not name.strip():
+        raise click.BadParameter("must not be empty", param_hint="--name")
+    sheet_path = _validated_import_sheet(sheet_path)
+
+    profile_name = _resolve_profile(profile)
+    profile_dir = _make_provider_dir(profile_name)
+    settings = get_settings()
+    run_with_handlers(
+        lambda: _run_import(
+            profile_name=profile_name,
+            profile_dir=profile_dir,
+            headless=settings.headless,
+            project_id=project_id,
+            name=name,
+            sheet=sheet_path,
+            personality=personality,
+            operation_id=operation_id,
+            settings=settings,
+            as_json=as_json,
+        ),
+        cli_command="character import",
+        as_json=as_json,
+    )
+
+
+async def _run_import(
+    *,
+    profile_name: str,
+    profile_dir: Path,
+    headless: bool,
+    project_id: str,
+    name: str,
+    sheet: Path,
+    personality: str | None,
+    operation_id: str,
+    settings: Settings,
+    as_json: bool,
+) -> None:
+    # Keep this lazy until the service lands in its shared module; it is imported
+    # before recorder/client startup so an import failure never opens a browser.
+    from gflow_cli.services.character_import import character_import
+
+    recorder = OperationRecorder.open(settings)
+    try:
+        async with FlowApiClient(profile_dir=profile_dir, headless=headless) as client:
+            result = await character_import(
+                client,
+                recorder,
+                profile_name=profile_name,
+                profile_dir=profile_dir,
+                project_id=project_id,
+                name=name,
+                sheet=sheet,
+                personality=personality,
+                operation_id=operation_id,
+            )
+    finally:
+        recorder.close()
+
+    character = result.readback.character
+    bindings = [
+        {"workflow_id": workflow_id, "media_id": media_id}
+        for workflow_id, media_id in result.readback.workflow_media_bindings
+    ]
+    if as_json:
+        json_output.emit(
+            {
+                "status": "ok",
+                "character": {
+                    "entity_id": character.entity_id,
+                    "project_id": character.project_id,
+                    "display_name": character.display_name,
+                    "workflow_ids": list(character.workflow_ids),
+                },
+                "workflow_media_bindings": bindings,
+                "source_sha256": result.source_sha256,
+            }
+        )
+    else:
+        console.print(f"[bold green]Character imported:[/bold green] {character.entity_id}")
+        console.print(f"  name: {character.display_name}")
+        for workflow_id, media_id in result.readback.workflow_media_bindings:
+            console.print(f"  workflow/media: {workflow_id} -> {media_id}")
+        console.print(f"  source SHA-256: {result.source_sha256}")
 
 
 # ---------------------------------------------------------------------------

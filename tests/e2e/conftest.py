@@ -43,6 +43,18 @@ from gflow_cli.config import get_settings, reset_settings
 from gflow_cli.errors import FlowHostMigratedError
 
 _E2E_PROFILE_ENV = "GFLOW_CLI_E2E_PROFILE"
+_E2E_HOME_ENV = "GFLOW_CLI_E2E_HOME"
+
+
+def _explicit_e2e_home() -> str | None:
+    """Optional authenticated home, independent of pytest's isolation override."""
+    value = os.environ.get(_E2E_HOME_ENV, "").strip()
+    if not value:
+        return None
+    path = Path(value)
+    if not path.is_absolute() or not path.is_dir():
+        pytest.fail(f"{_E2E_HOME_ENV} must be an existing absolute directory")
+    return str(path.resolve())
 
 
 @pytest.fixture
@@ -53,8 +65,8 @@ def e2e_profile_dir(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     Use this fixture in every e2e test that needs a live authenticated session
     instead of the inlined ``_profile_dir()`` helper.
 
-    Note: This fixture temporarily unsets ``GFLOW_CLI_HOME`` to resolve the real
-    user data directory, bypassing the isolation from ``_isolate_settings``.
+    This fixture bypasses pytest's isolated home. It uses the normal user data
+    directory unless ``GFLOW_CLI_E2E_HOME`` explicitly selects an existing home.
     """
     name = os.environ.get(_E2E_PROFILE_ENV, "").strip()
     if not name:
@@ -65,11 +77,14 @@ def e2e_profile_dir(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
 
     from gflow_cli.config import Settings
 
-    # Resolve real home by bypassing the isolation env var. _env_file=None
-    # also disables dotenv loading: a GFLOW_CLI_HOME line in a CWD or home
-    # .env must not redirect the "real user data dir" this fixture looks for.
+    # Resolve the authenticated home independently of the isolation env var.
+    # Disable dotenv too: only an explicit E2E home may override the default.
     with monkeypatch.context() as m:
-        m.delenv("GFLOW_CLI_HOME", raising=False)
+        home = _explicit_e2e_home()
+        if home is None:
+            m.delenv("GFLOW_CLI_HOME", raising=False)
+        else:
+            m.setenv("GFLOW_CLI_HOME", home)
         real_settings = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
         candidate = real_settings.profile_subdir(name)
 
@@ -142,6 +157,9 @@ def e2e_env(tmp_path: Path) -> Iterator[dict[str, str]]:
     # which is where PROFILES live, is restored. Six e2e modules each carried their own
     # copy of this pop; it belongs here, once.
     env.pop("GFLOW_CLI_HOME", None)
+    home = _explicit_e2e_home()
+    if home is not None:
+        env["GFLOW_CLI_HOME"] = home
     env["PYTHONUTF8"] = "1"
     env["GFLOW_CLI_DB_PATH"] = str(db)
     env["GFLOW_CLI_OUTPUT_DIR"] = str(out)

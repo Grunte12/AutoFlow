@@ -446,14 +446,16 @@ A 2-image run produces files numbered `_1.png`, `_2.png`:
 ## Character-consistent images (entity references)
 
 `--reference-entity` makes `image t2i`/`i2i` reference a locked Flow **CHARACTER
-entity** (minted via `gflow character create`) so the generated subject stays
-on-model across shots — no per-shot prompt wrangling or fragile image refs.
+entity** (created via `gflow character create` or imported with
+`gflow character import`) so the generated subject stays on-model across image
+shots — no per-shot prompt wrangling or fragile image refs.
 
 How it works: entities are **project-scoped**, so you must generate **in the
 project that owns them** via `--project <id>` (this also means no throwaway
 scratch project is created). The CLI attaches each entity through the Flow editor's
-resource picker; the submit then carries `referenceEntities`, exactly like the
-video R2V path. Entities count toward the same per-model reference cap as `--ref`
+resource picker; the image submit then carries `referenceEntities`. Video identity
+references remain gated until the video result can be attributed to the exact entity.
+Entities count toward the same per-model reference cap as `--ref`
 images. `--reference-entity` / `--project` / `--output` are **single-prompt only**.
 
 For a *pure* character reference (no starting image) use `t2i` — `i2i` still
@@ -488,24 +490,26 @@ the model sees. Shipped in v0.40.0 (#344).
 ```bash
 # One saved Character by name (t2i needs no image ref)
 gflow image t2i "@CaptainZoro on a rain-soaked neon rooftop, cinematic" --project <id>
-
-# Two saved Characters in one video prompt (each staged as a reference, cap-checked)
-gflow video r2v "@Zoro hands @Mika the sword" --project <id>
 ```
 
-**Where `@Name` works** — character mentions on image **and** video; media/asset
-mentions on image **only**:
+`@Name` Character references are available on supported image paths. On a
+project served by `flow.google.com`, the current video driver refuses entity
+references before submission while terminal attribution remains unverified.
+This is a gflow safety limit, not a claim about Flow's capabilities; no video
+Character-reference support is promised here.
+Media/asset mentions remain image-only:
 
 | Path | Character `@Name` | Media/asset `@Name` |
 |---|---|---|
 | `image t2i` | ✅ | ✅ (in-project asset → `referenceImages`) |
 | `image i2i` | ✅ | ✅ |
-| `video t2v` / `i2v` / `r2v` | ✅ | ❌ — media-on-video is Phase 3; fails fast with **exit 11** |
+| `video t2v` / `i2v` / `r2v` | Refused on `flow.google.com` | ❌ — media-on-video is not implemented |
 
 Rules:
 - **`--project <id>` is required** — mentions resolve against that project's assets.
-- A name resolves against **Characters** (`gflow character create`) *and* saved
-  media assets; on a name clash the **Character wins**. Matching is
+- A name resolves against **Characters** (`gflow character create` or
+  `gflow character import`) *and* saved media assets; on a name clash the
+  **Character wins**. Matching is
   **case-insensitive**.
 - A Character must have **at least one reference image** before it can be tagged,
   or the mention fails early.
@@ -518,11 +522,12 @@ Rules:
   "catalog unreachable" apart from "no such name".
 
 `@Name` and `--reference-entity <id>` resolve to the **same** wire
-(`referenceEntities`) and dedupe against each other: reach for `@Name` for the
-inline, by-name path — and `--reference-entity` when you'd rather pin
-an explicit entity id in a script. Both are available on `t2i`/`i2i` and on
-`video t2v`/`r2v`; `video i2v` takes neither, because its DTO rejects reference
-entities (it carries start/end frames instead). `--ref` is different: it
+(`referenceEntities`) and dedupe against each other on supported paths: reach
+for `@Name` for the inline, by-name path — and `--reference-entity` when you'd
+rather pin an explicit entity id in a script. Both are available on `t2i`/`i2i`.
+The migrated video driver currently refuses Character references until terminal
+attribution is verified; `video i2v` also carries start/end frames instead.
+`--ref` is different: it
 attaches an arbitrary **image** (`referenceImages`), not a saved identity, and can
 be combined with a `@Name` for "this identity, in this look".
 
@@ -789,11 +794,16 @@ gflow video r2v "blend these worlds" --ref a.png --ref b.png --ref c.png --model
 > on it. References given by `@Name` or `--reference-entity` (character entities) exit 36
 > there; an unmoved account keeps the labs driver for those.
 >
-> **`--duration` is refused on this path (exit 11).** The host offers reference-to-video
-> only at its base 8s tier. At 4s or 6s it does not refuse — it drops the references,
-> types their uploaded *names* into the prompt and bills a text-to-video clip (measured at
-> zero credits, 2026-09-06). Because the editor remembers the last duration used, an r2v
-> run pins 8s itself rather than inheriting it. Pass no `--duration`, or `--duration 8`.
+> **An explicit non-8s `--duration` is refused before submission (exit 11).**
+> This is the migrated driver's evidence-limited safety policy, not proof that Flow
+> offers R2V only at 8s. A Veo Lite capture preserved references at 8s but degraded
+> 4s/6s requests to text-to-video with the uploaded names instead of references
+> (route-blocked at zero credits, 2026-09-06). Other model/duration combinations,
+> including 10s, remain unverified by this driver. The refusal preserves your requested
+> duration and reports `capability="unverified"`; inspect the selected model's controls
+> and reference binding before explicitly approving a changed request. Do not
+> automatically downgrade, force another host, or retry. Omitted duration still pins
+> 8s because the editor remembers prior settings; explicit `--duration 8` is unchanged.
 
 ### Sharing one project across calls
 
@@ -1175,10 +1185,40 @@ source duration, and the composed total duration.
 
 ## `gflow character`
 
-Create and manage reusable **Flow Character entities** — project-scoped,
-broadly-available identities you can reuse across generations (#145). Full
-design + wire protocol: [CHARACTER](CHARACTER.md). Every subcommand takes
+Create, import, and manage project-scoped **Flow Character entities** (#145).
+Full design + wire protocol: [CHARACTER](CHARACTER.md). Every subcommand takes
 `--project <id>` (required); use `--id`/`--name` flags, never a positional.
+
+### `gflow character import`
+
+Import an existing image sheet through Flow's native Character form. This path
+uploads the original file and never invokes image generation or clicks Generate.
+The upload was not billed in the observed run; that observation is not a general
+Flow billing guarantee.
+
+```text
+gflow character import --project PROJECT_ID --name NAME --sheet PATH --operation-id UUID
+                       [--personality TEXT] [--profile NAME] [--json]
+
+Options:
+  --project PROJECT_ID      Flow project UUID.                         [required]
+  --name NAME               Display name for the imported character.    [required]
+  --sheet PATH              Local PNG/JPEG/WebP/GIF image sheet.        [required]
+  --operation-id UUID       Caller-supplied canonical UUID, unique to this import. [required]
+  --personality TEXT        Optional personality notes.
+  --profile NAME            Profile name (overrides default).
+  --json                    Emit a machine-readable JSON result.
+```
+
+The operation record is written before the native UI mutation. Reuse the same
+operation ID only to reconcile that import. If an interruption leaves no
+checkpointed entity or exact image binding, the command refuses to create a
+replacement or upload again; inspect and resolve the original operation before
+starting another import. A name match is never used to guess an existing entity.
+Success verifies the uploaded media against the exact project, Character, and
+workflow binding, then reloads the Character form to confirm the requested name
+and personality. The result includes stable IDs and a source SHA-256, not the
+local path.
 
 ### `gflow character create`
 
@@ -1241,6 +1281,10 @@ gflow character show --project PROJECT_ID (--id ENTITY_ID | --name NAME) [--json
 Shows one character's detail (entity id, project, voice, personality, reference
 workflow ids). Provide **exactly one** of `--id` or `--name`. An ambiguous
 `--name` (multiple characters share it) exits with code **11**.
+
+On `flow.google.com`, native list/show readback currently omits voice and
+personality. A null value means those fields were not returned or verified; it
+does not prove that Flow has no saved value.
 
 ### `gflow character rm`
 
@@ -1738,6 +1782,16 @@ use. When set:
   rate-limit / network / timeout) that a worker scheduler can key its
   retry-vs-absorb decision off — and exits with the same non-zero code as the
   Rich path.
+
+An explicit pre-submit configuration refusal remains exit 11 and adds type
+`…/errors/presubmit-configuration` with `submission_state="not_submitted"`,
+`stage="configuration"`, `setting`, `requested_value`, `capability`
+(`unverified` or `unsupported`), and `safe_next_action`
+(`inspect_controls`, `accept_default`, or `adjust_request`). It is nonretryable.
+These fields are emitted only when the operation is known not to have invoked a
+generation click or dispatch. An ordinary `ConfigurationError`, timeout, or missing
+reply is not that proof; do not assume no submission or no spend. A suggested
+`accept_default` action still requires approval to change an explicit request.
 
 The data-layer recorder fires regardless of `--json`, so audit history is
 independent of the output channel.

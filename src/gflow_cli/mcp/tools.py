@@ -487,6 +487,14 @@ def _bad_param(title: str, detail: str) -> dict[str, Any]:
     }
 
 
+def _is_canonical_uuid(value: str) -> bool:
+    """Accept only the canonical lowercase UUID representation used by Flow."""
+    try:
+        return str(uuid.UUID(value)) == value
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
 def _resolve_ref_local_path(
     data_repo: DataRepository,
     profile: str,
@@ -1442,6 +1450,103 @@ async def gflow_character_show(
         char = await client.get_character(project, entity_id=entity_id, name=name)
 
     return {"status": "ok", "project": project, "character": _character_to_dict(char)}
+
+
+@server.tool(
+    name="gflow_character_import",
+    description=(
+        "Import an existing local image sheet into a Flow Character through Flow's native "
+        "character form. This does not generate an image or spend generation credits. "
+        "Requires canonical project and operation UUIDs; operation_id is a caller-supplied "
+        "idempotency key. An uncertain or failed import is never automatically retried or "
+        "recreated. Returns stable entity/workflow/media IDs and a source SHA-256 only; "
+        "local file paths and signed URLs are not returned."
+    ),
+)
+@_guarded
+async def gflow_character_import(
+    project: str,
+    name: str,
+    sheet_path: str,
+    operation_id: str,
+    personality: str | None = None,
+    profile: str = _DEFAULT_PROFILE,
+) -> dict[str, Any]:
+    """Create a Character from an existing image sheet without generating pixels.
+
+    Args:
+        project: Canonical Flow project UUID.
+        name: Character display name.
+        sheet_path: Local PNG/JPEG/WebP/GIF image path.
+        operation_id: Caller-supplied canonical UUID idempotency key.
+        personality: Optional personality notes.
+        profile: gflow-cli profile name; resolves like the CLI when left as "default".
+
+    Returns stable IDs and the source SHA-256. The local path is never included.
+    """
+    if not _is_canonical_uuid(project):
+        return _bad_param("Invalid project UUID", "project must be a canonical UUID.")
+    if not _is_canonical_uuid(operation_id):
+        return _bad_param("Invalid operation UUID", "operation_id must be a canonical UUID.")
+    if not name.strip():
+        return _bad_param("Invalid character name", "name must not be empty.")
+    if not sheet_path.strip():
+        return _bad_param("Invalid sheet path", "sheet_path must name a local image file.")
+
+    try:
+        sheet = Path(sheet_path).expanduser().resolve(strict=True)
+        if not sheet.is_file():
+            return _bad_param("Invalid sheet path", "sheet_path must name a local image file.")
+        from gflow_cli.api.client import validate_image_file
+
+        await validate_image_file(sheet)
+    except (OSError, RuntimeError, ValueError):
+        return _bad_param(
+            "Invalid sheet image",
+            "sheet_path must be a readable PNG, JPEG, WebP, or GIF within the supported "
+            "size limit.",
+        )
+
+    # Local imports keep the mutation service and recorder out of read-only tools.
+    from gflow_cli.data.recorder import OperationRecorder
+    from gflow_cli.services.character_import import character_import
+
+    resolved = _resolve_and_validate_profile(profile)
+    if isinstance(resolved, dict):
+        return resolved
+
+    settings = get_settings()
+    profile_dir = settings.profile_subdir(resolved)
+    log.info("mcp.tool.character_import", project=project, profile=resolved)
+    async with _profile_lock(resolved):
+        recorder = OperationRecorder.open(settings)
+        try:
+            async with FlowApiClient(profile_dir=profile_dir, headless=settings.headless) as client:
+                result = await character_import(
+                    client,
+                    recorder,
+                    profile_name=resolved,
+                    profile_dir=profile_dir,
+                    project_id=project,
+                    name=name,
+                    sheet=sheet,
+                    personality=personality,
+                    operation_id=operation_id,
+                )
+        finally:
+            recorder.close()
+
+    character = result.readback.character
+    return {
+        "status": "ok",
+        "project": character.project_id,
+        "character": _character_to_dict(character),
+        "workflow_media_bindings": [
+            {"workflow_id": workflow_id, "media_id": media_id}
+            for workflow_id, media_id in result.readback.workflow_media_bindings
+        ],
+        "source_sha256": result.source_sha256,
+    }
 
 
 @server.tool(

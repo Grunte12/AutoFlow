@@ -127,6 +127,8 @@ if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
     from gflow_cli.api.image import AgentInstruction, GenerateImageRequest, ImageRef, ProjectBrief
+    from gflow_cli.api.transports.native_character import NativeCharacterReadback
+    from gflow_cli.api.transports.native_character_import import NativeCharacterImportResult
     from gflow_cli.api.video import (
         GenerateVideoRequest,
         VideoResult,
@@ -276,6 +278,14 @@ def _is_supported_image_header(header: bytes) -> bool:
     if header[:4] == b"RIFF" and header[8:12] == b"WEBP":
         return True
     return header[:6] in (b"GIF87a", b"GIF89a")
+
+
+def validate_image_bytes(source: bytes) -> None:
+    """Validate immutable upload bytes, including a file-swap after path validation."""
+    if len(source) > MAX_IMAGE_BYTES:
+        raise ValueError("Image bytes exceed the upload size limit")
+    if not _is_supported_image_header(source[:12]):
+        raise ValueError("Not a supported image format")
 
 
 async def validate_image_file(image_path: Path) -> None:
@@ -3104,13 +3114,36 @@ class FlowApiClient:
     async def list_characters(self, project_id: str) -> list[Character]:
         """Return all CHARACTER entities in *project_id*.
 
-        Maps to ``GET .../trpc/flow.projectInitialData?input=…``.
-        Session-cookie auth.  FREE — no reCAPTCHA, no credit.
+        Reads the native project payload on flow.google.com. On labs.google,
+        maps to ``GET .../trpc/flow.projectInitialData?input=…`` with
+        session-cookie auth. FREE — no reCAPTCHA, no credit. In auto mode only
+        the measured labs-route 401/404 refusal triggers the native readback.
         """
-        trpc_input = json.dumps({"json": {"projectId": project_id}}, separators=(",", ":"))
-        url = f"{routes.PROJECT_INITIAL_DATA_URL}?input={quote(trpc_input, safe='')}"
-        data = await self._get_json(url, route_name="projectInitialData")
-        chars = parse_characters(_unwrap_trpc(data))
+        page = self._page
+        page_origin = flow_host_kind(getattr(page, "url", None) if page is not None else None)
+        use_native = self.settings.flow_host == "flow.google.com" or page_origin == "migrated"
+
+        if not use_native:
+            trpc_input = json.dumps({"json": {"projectId": project_id}}, separators=(",", ":"))
+            url = f"{routes.PROJECT_INITIAL_DATA_URL}?input={quote(trpc_input, safe='')}"
+            try:
+                data = await self._get_json(url, route_name="projectInitialData")
+                chars = parse_characters(_unwrap_trpc(data))
+                logger.debug("character.list_fetched", project_id=project_id, count=len(chars))
+                return chars
+            except (AuthExpiredError, WireFormatError) as exc:
+                if not self._labs_project_route_refused(exc):
+                    raise
+
+        # Local import keeps the browser-only transport out of REST-only clients.
+        from gflow_cli.api.transports import native_character_ui  # noqa: PLC0415
+
+        page = await self._checkout_page()
+        try:
+            readbacks = await native_character_ui.read_native_characters(page, project_id)
+            chars = [item.character for item in readbacks]
+        finally:
+            self._checkin_page(page)
         logger.debug("character.list_fetched", project_id=project_id, count=len(chars))
         return chars
 
@@ -3219,6 +3252,57 @@ class FlowApiClient:
                 remediation_hint="Use --entity-id to select one character unambiguously.",
             )
         return match[0]
+
+    async def get_character_import_readback(
+        self, project_id: str, entity_id: str
+    ) -> NativeCharacterReadback:
+        """Read exact native Character workflow/media bindings without mutation."""
+        from gflow_cli.api.transports.native_character_ui import (  # noqa: PLC0415
+            read_verified_native_character,
+        )
+
+        page = await self._checkout_page()
+        try:
+            return await read_verified_native_character(page, project_id, entity_id)
+        finally:
+            self._checkin_page(page)
+
+    async def import_character_sheet(
+        self,
+        *,
+        project_id: str,
+        name: str,
+        sheet: Path,
+        personality: str | None = None,
+        on_entity_created: Callable[[str], Awaitable[None]] | None = None,
+    ) -> NativeCharacterImportResult:
+        """Import original sheet bytes through the native form, never generate media.
+
+        Call through the operation-aware import service, which records intent
+        before mutation and refuses blind replay after an interruption.
+        """
+        from gflow_cli.api.transports.native_character_import import (  # noqa: PLC0415
+            import_native_character,
+        )
+
+        await validate_image_file(sheet)
+        if self.settings.flow_host == "labs.google":
+            raise ConfigurationError(
+                "Original-sheet Character import is verified only on flow.google.com",
+                route="native:characterImport",
+            )
+        page = await self._checkout_page()
+        try:
+            return await import_native_character(
+                page,
+                project_id=project_id,
+                name=name,
+                sheet=sheet,
+                personality=personality,
+                on_entity_created=on_entity_created,
+            )
+        finally:
+            self._checkin_page(page)
 
     async def patch_entity(
         self,

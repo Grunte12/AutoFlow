@@ -638,6 +638,10 @@ def test_all_domain_errors_provide_remediation_hint() -> None:
     assert len(domain_classes) >= 30
 
     for exc_cls in domain_classes:
+        if exc_cls.__name__ == "PreSubmitConfigurationError":
+            exc = exc_cls(setting="duration", requested_value=6)
+            assert exc.to_problem_details()["remediation_hint"]
+            continue
         try:
             exc = exc_cls()
         except TypeError:

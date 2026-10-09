@@ -1142,6 +1142,7 @@ class DataRepository:
             WHERE flow_project_id = ?
               AND mode = 'character'
               AND status = 'started'
+              AND command = 'character create'
               AND json_extract(metadata_json, '$.name') = ?
             ORDER BY started_at DESC
             LIMIT 1

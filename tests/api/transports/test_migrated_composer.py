@@ -36,6 +36,7 @@ from gflow_cli.errors import (
     FlowHostMigratedError,
     InsufficientCreditsError,
     MediaUploadRejectedError,
+    PreSubmitConfigurationError,
     ReferenceNotFoundError,
     TransportTimeoutError,
     UiSelectorDriftError,
@@ -1011,10 +1012,21 @@ async def test_r2v_with_an_explicit_degrading_duration_is_refused_before_submit(
     from gflow_cli.api.transports.migrated_composer import MigratedComposer
 
     page = FakePage()
-    with pytest.raises(ConfigurationError) as exc_info:
+    with pytest.raises(PreSubmitConfigurationError) as exc_info:
         await MigratedComposer().apply_video_settings(page, _r2v_request(duration=4))
     message = str(exc_info.value)
-    assert "8s" in message and "silently drops the references" in message
+    assert "at 4s" in message and "verified baseline is 8s" in message
+    assert "not proof that other lengths are absent from Flow" in message
+    proof = exc_info.value.to_problem_details()
+    assert proof["submission_state"] == "not_submitted"
+    assert proof["stage"] == "configuration"
+    assert proof["setting"] == "duration"
+    assert proof["requested_value"] == 4
+    assert proof["capability"] == "unverified"
+    assert proof["safe_next_action"] == "inspect_controls"
+    assert is_retryable(exc_info.value) is False
+    assert page.dom.pane_open is False  # refused before opening settings
+    assert page.dom.submit_clicked == 0
     assert page.dom.groups["duration"][0].checked is False  # nothing was selected
 
 

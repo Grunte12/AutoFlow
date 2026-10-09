@@ -23,11 +23,11 @@
 
 <!-- sponsors-gold:end -->
 
-> ⚠️ **Read this before you install.** gflow-cli is **alpha and reverse-engineered — not affiliated with Google**. It drives a headed browser on *your own* Google Flow session, so treat it as your own account risk: automation is subject to Google's ToS, and endpoints or UI can change without notice. It works with **any Google account** that has Flow access, and every generation bills against your account's Flow credit allowance. Read the full [DISCLAIMER](DISCLAIMER.md).
+> ⚠️ **Read this before you install.** gflow-cli is **alpha and reverse-engineered — not affiliated with Google**. It drives a headed browser on *your own* Google Flow session, so treat it as your own account risk: automation is subject to Google's ToS, and endpoints or UI can change without notice. It works with **any Google account** that has Flow access; operations follow Flow's credit or daily-quota rules. Read the full [DISCLAIMER](DISCLAIMER.md).
 >
 > 🛡️ **"Will this get my account flagged?"** The honest, specific answer — what the tool does to stay unremarkable (headed real Chrome, randomised interaction timing, paced submissions), what it deliberately does **not** do (no proxies, no fingerprint spoofing, no pretending it isn't automation), what you can tune, and what we cannot promise — is in [docs/ACCOUNT_SAFETY.md](docs/ACCOUNT_SAFETY.md).
 >
-> 💳 **What failure costs you.** Credits are only spent on Veo *video* generation — images and composition ops are free, so most breakage costs nothing. When Flow's UI drifts mid-run, the CLI fails fast and loudly with distinct exit codes (e.g. selector drift = exit 23) instead of resubmitting, and batch items are recorded locally *before* submission so a broken run never silently burns credits on a stale state. See [KNOWN_ISSUES](KNOWN_ISSUES.md) for the current risk list.
+> 💳 **Costs depend on the operation.** Veo video generation uses the Flow credit balance; image models use separate daily quotas. An upload or utility action is not automatically free just because it skips generation. When Flow's UI drifts mid-run, the CLI fails fast with distinct exit codes instead of resubmitting, and batch items are recorded locally before submission. See [KNOWN_ISSUES](KNOWN_ISSUES.md) for the current risk list.
 >
 > 🌐 **Headed browser today.** gflow drives Flow through a persistent Playwright Chromium profile, because Google's auth and reCAPTCHA gates require it. The [Architecture](#architecture--current-limitations) section shows where you can help.
 
@@ -36,7 +36,7 @@
 You have a Google account with Flow access, you have Veo credits, and you run real batch work. gflow-cli gives you:
 
 - **Batch generation.** Loop prompts straight from the shell: `for p in $(cat prompts.txt); do gflow image t2i "$p"; done`. Image batching plus `gflow video t2v` / `i2v` / `r2v` all ship today, and `gflow video extend` continues an existing clip past Flow's 8s ceiling.
-- **Consistent subjects.** `gflow character create` mints a Flow Character (face and body reference) so the same person appears from one generation to the next.
+- **Project-scoped Characters.** Create one from generated references or import an original sheet with `gflow character import`; the import is a separate non-generating workflow.
 - **Prompt tools.** `--tool creative-director` rewrites a terse prompt into a vivid one (Google's 5-component formula) before generating — on any command. Bring your own with [My Tools](docs/TOOLS.md).
 - **Pipelines.** Wire Veo into your content automation, AI-video stack, or batch experiments.
 - **Terminal-native.** After one `gflow auth login`, you stay in the shell. No clicking through dialogs.
@@ -61,8 +61,10 @@ gflow credits user
 gflow image t2i "a hot air balloon over Tokyo at sunrise"
 # or:
 gflow video t2v "Slow cinematic push-in on a sunlit forest clearing" --aspect 16:9
-# or mint a reusable Character (face + body reference):
+# or create a Character from generated references:
 gflow character create --project <id> --name "Aria" --face-prompt "..." --body-prompt "..."
+# or import an existing sheet without invoking image generation:
+gflow character import --project <id> --name "Aria" --sheet <sheet-path> --operation-id <uuid>
 ```
 
 Outputs land under `$GFLOW_CLI_OUTPUT_DIR`, or you can route them to S3, MinIO, or Google Cloud Storage with [`GFLOW_CLI_STORAGE_URI`](docs/EXTERNAL_STORAGE.md). The first call takes 30 to 90 seconds while Chromium warms up; later calls reuse the warm session.

@@ -7,6 +7,8 @@ calls are made.  Mirrors the fake-page pattern used in test_client_scene.py.
 from __future__ import annotations
 
 import json as _json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from urllib.parse import quote as _quote
 
 import pytest
@@ -14,6 +16,7 @@ import pytest
 from gflow_cli.api import routes
 from gflow_cli.api.character import Character
 from gflow_cli.api.client import FlowApiClient, _unwrap_trpc
+from gflow_cli.api.transports.native_character import NativeCharacterReadback
 from gflow_cli.errors import ConfigurationError, WireFormatError
 
 # ---------------------------------------------------------------------------
@@ -57,6 +60,7 @@ def _client_with(page: _FakePage) -> FlowApiClient:
     c._context = None
     c._access_token = "ya29.test"
     c._access_token_exp = 9_999_999_999
+    c.settings = SimpleNamespace(flow_host="labs.google")
     return c
 
 
@@ -200,6 +204,122 @@ async def test_list_characters_empty_project_returns_empty_list():
 
     chars = await client.list_characters("proj-empty")
     assert chars == []
+
+
+def _native_readback() -> NativeCharacterReadback:
+    workflow_id = "c0000000-0000-4000-8000-000000000001"
+    media_id = "d0000000-0000-4000-8000-000000000001"
+    character = Character(
+        entity_id="b0000000-0000-4000-8000-000000000001",
+        display_name="Momo",
+        project_id="a0000000-0000-4000-8000-000000000001",
+        workflow_ids=(workflow_id,),
+        voice=None,
+        personality=None,
+        thumbnail_media_id=media_id,
+    )
+    return NativeCharacterReadback(
+        character=character,
+        workflow_media_bindings=((workflow_id, media_id),),
+    )
+
+
+async def test_list_characters_uses_native_readback_when_flow_host_is_migrated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from gflow_cli.api.transports import native_character_ui
+
+    client = _client_with(_FakePage(_FakeResp(200, "{}")))
+    client.settings = SimpleNamespace(flow_host="flow.google.com")
+    client._get_json = AsyncMock(side_effect=AssertionError("REST must not be called"))
+    calls: list[tuple[object, str]] = []
+
+    async def read_native(page: object, project_id: str) -> list[NativeCharacterReadback]:
+        calls.append((page, project_id))
+        return [_native_readback()]
+
+    monkeypatch.setattr(native_character_ui, "read_native_characters", read_native)
+
+    chars = await client.list_characters("a0000000-0000-4000-8000-000000000001")
+
+    assert [character.display_name for character in chars] == ["Momo"]
+    assert calls == [(client._page, "a0000000-0000-4000-8000-000000000001")]
+    client._get_json.assert_not_awaited()
+
+
+async def test_list_characters_routes_by_active_migrated_page_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from gflow_cli.api.transports import native_character_ui
+
+    page = _FakePage(_FakeResp(200, "{}"))
+    page.url = "https://flow.google.com/project/a0000000-0000-4000-8000-000000000001"
+    client = _client_with(page)
+    client.settings = SimpleNamespace(flow_host="auto")
+    client._get_json = AsyncMock(side_effect=AssertionError("REST must not be called"))
+    native = AsyncMock(return_value=[_native_readback()])
+    monkeypatch.setattr(native_character_ui, "read_native_characters", native)
+
+    chars = await client.list_characters("a0000000-0000-4000-8000-000000000001")
+
+    assert chars[0].entity_id == "b0000000-0000-4000-8000-000000000001"
+    native.assert_awaited_once_with(page, "a0000000-0000-4000-8000-000000000001")
+    client._get_json.assert_not_awaited()
+
+
+async def test_auto_host_falls_back_only_for_measured_labs_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from gflow_cli.api.transports import native_character_ui
+
+    client = _client_with(_FakePage(_FakeResp(200, "{}")))
+    client.settings = SimpleNamespace(flow_host="auto")
+    refused = WireFormatError("labs route retired", status=404)
+    client._get_json = AsyncMock(side_effect=refused)
+    native = AsyncMock(return_value=[_native_readback()])
+    monkeypatch.setattr(native_character_ui, "read_native_characters", native)
+
+    chars = await client.list_characters("a0000000-0000-4000-8000-000000000001")
+
+    assert chars[0].display_name == "Momo"
+    native.assert_awaited_once_with(client._page, "a0000000-0000-4000-8000-000000000001")
+
+
+async def test_auto_host_does_not_fallback_for_generic_read_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from gflow_cli.api.transports import native_character_ui
+
+    client = _client_with(_FakePage(_FakeResp(200, "{}")))
+    client.settings = SimpleNamespace(flow_host="auto")
+    failure = RuntimeError("transient local error")
+    client._get_json = AsyncMock(side_effect=failure)
+    native = AsyncMock(return_value=[_native_readback()])
+    monkeypatch.setattr(native_character_ui, "read_native_characters", native)
+
+    with pytest.raises(RuntimeError) as caught:
+        await client.list_characters("a0000000-0000-4000-8000-000000000001")
+
+    assert caught.value is failure
+    native.assert_not_awaited()
+
+
+async def test_pinned_labs_host_keeps_the_original_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from gflow_cli.api.transports import native_character_ui
+
+    client = _client_with(_FakePage(_FakeResp(200, "{}")))
+    refused = WireFormatError("labs route retired", status=404)
+    client._get_json = AsyncMock(side_effect=refused)
+    native = AsyncMock(return_value=[_native_readback()])
+    monkeypatch.setattr(native_character_ui, "read_native_characters", native)
+
+    with pytest.raises(WireFormatError) as caught:
+        await client.list_characters("proj-labs")
+
+    assert caught.value is refused
+    native.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

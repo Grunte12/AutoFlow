@@ -111,7 +111,7 @@ def _isolate_structlog_config() -> Iterator[None]:
 
 @pytest.fixture(autouse=True)
 def _isolate_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Redirect GFLOW_CLI_HOME and GFLOW_CLI_DB_PATH to per-test tmp dirs.
+    """Redirect home, database and generated output to per-test temporary paths.
 
     Clears the ``get_settings()`` lru_cache before the test so the first call
     inside the test (or in any fixture that runs after this one) reads the
@@ -134,6 +134,7 @@ def _isolate_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterat
 
     monkeypatch.setenv("GFLOW_CLI_HOME", str(tmp_path / "gflow_home"))
     monkeypatch.setenv("GFLOW_CLI_DB_PATH", str(tmp_path / "test_gflow.db"))
+    monkeypatch.setenv("GFLOW_CLI_OUTPUT_DIR", str(tmp_path / "output"))
     # #479: the per-test empty home means the update-check cache is always
     # stale — without this, any CliRunner test on a non-editable install
     # without CI set would spawn a real PyPI request. tests/test_update_check.py
