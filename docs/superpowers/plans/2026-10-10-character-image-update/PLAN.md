@@ -45,9 +45,15 @@ generation route; simplicity: two optional inputs, no new registry or daemon.
 - [x] Regression and browser-bound BDD, including read-only replay.
 - [x] Luna runs offline cases; lead runs authorized live cases sequentially on one profile.
 - [x] Lead review, quality gates, sanitized live receipt and mirrored docs.
-- [ ] Push only to owner's AutoFlow feature branch; install preserving dirty runtime.
+- [x] Push only to owner's AutoFlow feature branch; install preserving dirty runtime.
 - [x] Verify installed MCP tool/version and read-only replay.
-- [ ] Send final tool handoff after owner-branch push.
+- [x] Send final tool handoff after owner-branch push.
+
+Delivery: verified implementation commit `822fb263` is on the owner's
+`feature/character-image-update` branch. Local editable source installation
+reports 0.83.0a4; installed LinkHub update/replay succeeded. The Affiliate chat
+received the approved-image bindings and browser-hold release. No upstream PR,
+merge, tag or registry release was performed.
 
 ## Live coordination
 
