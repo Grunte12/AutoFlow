@@ -68,7 +68,11 @@ model pixel consumption or rendered Character identity.
 - [x] Final hygiene, docs/mirror/privacy and lint/format passed; strict src types:
   zero errors. Final offline run: 5115 passed, seven skipped, 91.90% coverage.
   Four isolated workers completed in 132.61 seconds.
-- [ ] Owner branch push and scoped editable runtime installation.
+- [x] Code commit `0b9bfd01` pushed to the owner's `bugfix/omni-r2v-10s`
+  branch; remote SHA read back. Scoped editable runtime installed as a7.
+- [x] Fresh authenticated native MCP advertised a7 with 22 tools. After idle-only
+  service reconnection, public MCP LinkHub reads for both Goofy and Memo passed.
+  No provider permissions, token or Tincan relay changes were made.
 - [x] Installed-runtime guarded acceptance.
 - [ ] Rendered identity acceptance: remains unresolved; no new generation authorized.
 

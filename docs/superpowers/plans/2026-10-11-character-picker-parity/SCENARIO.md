@@ -37,4 +37,4 @@ serialization cannot prove server-side Character image resolution or likeness.
 - [x] Old fresh production path failed in guarded comparison before source repair.
 - [x] Minimal shared Character confirmation repair.
 - [x] Luna independent unit and real guarded two-arm regression.
-- [ ] Quality gates, owner branch push and scoped preview installation.
+- [x] Quality gates, owner branch push and scoped preview installation.
