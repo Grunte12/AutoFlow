@@ -48,5 +48,8 @@ User-side acceptance is a separate gate: the Affiliate chat completed the
 same-operation Character-update replay and the one authorized paid clip.
 Transport passed; creative identity FAILED (cartoon/human instead of the approved
 puppy/kitten). No further generation, Character mutation or retry is authorized.
-The metadata reader also hardcodes personality/voice to null, so stored
-personalization remains unknown. See the preview receipt's acceptance section.
+The metadata reader hardcodes personality/voice to null. A fresh native project
+read verified actual stored personality is nonempty, matches the prior native
+audit, and retains approved image bindings; missing personalization is falsified.
+The public readback defect is separate from the unresolved rendering cause.
+See the preview receipt's acceptance section.

@@ -74,8 +74,12 @@ Read-only diagnosis establishes two limitations, not a proven rendering cause:
 - `native_character.py` currently hardcodes `personality=None` and `voice=None`
   in its project parser. Public null readback cannot establish empty stored
   metadata. Import's metadata verification observes personality at
-  `character_info[2]`; a verified read path is required before blaming missing
-  personalization. Character images/personality were not changed during diagnosis.
+  `character_info[2]`. A subsequent fresh native project read verified nonempty
+  stored personality for both Characters (278 and 354 characters), exactly
+  matching the prior native UI audit; approved image bindings also matched.
+  Missing saved personalization is therefore falsified. The public reader has
+  a separate confirmed metadata-readback defect, not a proven cause of the
+  rendered identity failure. Character images/personality were not changed.
 
 Input binding and successful transport are not successful character identity.
 Keep paid generation stopped until the owner reviews the failed candidate and
