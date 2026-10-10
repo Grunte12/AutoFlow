@@ -185,22 +185,21 @@ def rpc_errors(text: str) -> list[RpcError]:
 
 
 def _is_record(node: list[Any]) -> bool:
-    if len(node) < 6 or node[3] != "CAE":
+    if len(node) < 6 or not all(
+        isinstance(node[i], str) and _UUID_RE.fullmatch(node[i]) for i in (0, 1, 2)
+    ):
         return False
-    return all(isinstance(node[i], str) and _UUID_RE.match(node[i]) for i in (0, 1, 2))
-
-
-def _find_record(node: object) -> list[Any] | None:
-    items = _as_list(node)
-    if items is None:
-        return None
-    if _is_record(items):
-        return items
-    for child in items:
-        found = _find_record(child)
-        if found is not None:
-            return found
-    return None
+    if node[3] == "CAE":
+        return True
+    return (
+        len(node) >= 8
+        and node[3] is None
+        and node[4] is None
+        and node[6] is None
+        and type(_at(node, 5, 8, 0)) is int
+        and isinstance(_at(node, 7, 0), list)
+        and _at(node, 7, 2, 0) == node[0]
+    )
 
 
 def _walk_lists(node: object) -> list[list[Any]]:
@@ -232,29 +231,44 @@ def _discovery_head(payload: Any) -> str:
     return redact_error_detail(_TOKEN_RE.sub("<token>", head))
 
 
-def generation_record(rpcid: str, payload: Any) -> GenerationRecord:
+def generation_record(
+    rpcid: str,
+    payload: Any,
+    *,
+    project_id: str | None = None,
+    workflow_id: str | None = None,
+    media_id: str | None = None,
+) -> GenerationRecord:
     """Locate and decode the generation record inside one frame's payload.
 
     Raises :class:`WireFormatError` (with a redacted discovery head) when no
     record-shaped list exists — the migrated backend changed its envelope.
     """
-    rec = _find_record(payload)
-    if rec is None:
+    records = [
+        node
+        for node in _walk_lists(payload)
+        if _is_record(node)
+        and (project_id is None or node[1] == project_id)
+        and (workflow_id is None or node[0 if node[3] == "CAE" else 2] == workflow_id)
+        and (media_id is None or node[2 if node[3] == "CAE" else 0] == media_id)
+    ]
+    if len({tuple(node[:3]) for node in records}) != 1:
         raise WireFormatError(
             detail=(
-                f"batchexecute {rpcid}: no generation record "
-                f"([uuid, uuid, uuid, 'CAE', …]) in the reply"
+                f"batchexecute {rpcid}: no unique generation record in the reply; "
+                "inspect the existing Flow job before retrying"
             ),
             route=f"batchexecute:{rpcid}",
             discovery={"rpcid": rpcid, "payload_head": _discovery_head(payload)},
         )
+    rec = records[0]
     status_cell = _as_list(_at(rec, 5, 8))
     status: Any = status_cell[0] if status_cell else None
     size: Any = _at(rec, 5, 13)
     return GenerationRecord(
-        workflow_id=rec[0],
+        workflow_id=rec[0 if rec[3] == "CAE" else 2],
         project_id=rec[1],
-        media_id=rec[2],
+        media_id=rec[2 if rec[3] == "CAE" else 0],
         status=status if isinstance(status, int) else None,
         video_url=_url(_at(rec, 7, 0, 8)),
         poster_url=_url(_at(rec, 5, 10)),

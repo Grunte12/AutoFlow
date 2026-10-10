@@ -281,6 +281,17 @@ class FakeLocator:
         return self.page.locator(css, scope=self)
 
     # --- reads --------------------------------------------------------------
+    async def evaluate_all(self, _script: str) -> list[list[int | None]]:
+        assert self.kind == "group"
+        result = []
+        for key in self.items:
+            row = []
+            for radio in self.page.dom.groups[key]:
+                match = re.fullmatch(r"\s*(\d+)\D*", radio.text)
+                row.append(int(match[1]) if match else None)
+            result.append(row)
+        return result
+
     async def count(self) -> int:
         if self.kind == "dialog" and self.page.dom.dialog_probe_raises:
             raise PlaywrightTimeoutError("count: Target page, context or browser has been closed")
@@ -680,6 +691,8 @@ class FakePage:
                 return FakeLocator(self, "group", [])  # a menu pane has no option groups
             return FakeLocator(self, "group", list(dom.groups) if dom.pane_open else [])
         if css == "[role='radio']":
+            if scope is not None and scope.kind == "group" and scope.items:
+                return FakeLocator(self, "radio", list(dom.groups[scope.items[0]]))
             if scope is not None and scope.items and scope.items[0] != "pane":
                 return FakeLocator(self, "radio", [])
             radios = [r for g in dom.groups.values() for r in g] if dom.pane_open else []
@@ -1262,6 +1275,68 @@ def test_matcher_excludes_the_lower_priority_suffix_by_default() -> None:
 
 
 # --- prompt + submit --------------------------------------------------------
+
+
+async def test_saved_character_null_ack_uses_exact_new_prompt_not_first_status_row() -> None:
+    from types import SimpleNamespace
+    from urllib.parse import urlencode
+
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    project = "22222222-2222-4222-8222-222222222222"
+    entity = "88888888-8888-4888-8888-888888888888"
+    doc = [None, None, [[[None, [None, None, [entity, "Goofy"]]], ["hello"]]]]
+    spec = [doc, None, "abra_r2v_8s", 1, None, None, None, None, None, [[entity]]]
+    payload = [[spec], [None, 22, None, None, None, project]]
+    body = urlencode({"f.req": json.dumps([[["MZZa6b", json.dumps(payload), None, "generic"]]])})
+    rec = _record(3, VIDEO_URL)
+    rec[0], rec[2], rec[3] = MEDIA, rec[0], None
+    rec[5][6] = [None, None, [doc]]
+    rec[7].append([MEDIA])
+    old = json.loads(json.dumps(rec))
+    old[0] = "99999999-9999-4999-8999-999999999999"
+    old[7][2] = [old[0]]
+    page = FakePage()
+    page.dom.prompt = "hello"
+    guard: list[Any] = []
+
+    async def register(_pattern: Any, handler: Any) -> None:
+        guard.append(handler)
+
+    async def continue_request() -> None:
+        page._fire_response(
+            FakeResponse(
+                _batch_url("MZZa6b"),
+                json.dumps([["wrb.fr", "MZZa6b", None, None, None, [5], "generic"]]),
+            )
+        )
+        page._fire_response(FakeResponse(_batch_url("jwpduf"), _frame("jwpduf", [old, rec])))
+
+    route = SimpleNamespace(continue_=continue_request, abort=AsyncMock())
+    page.route = register  # type: ignore[method-assign]
+    page._fire_submit = lambda: asyncio.create_task(
+        guard[0](route, SimpleNamespace(url=_batch_url("MZZa6b"), post_data=body))
+    )  # type: ignore[method-assign]
+    started: list[Any] = []
+    result = await MigratedComposer().submit_and_observe(
+        page,
+        poll_timeout_s=2,
+        on_started=started.append,
+        project_id=project,
+        expect_entity_ids=(entity,),
+        baseline_media_ids=frozenset({old[0]}),
+    )
+    assert result.media_id == MEDIA and result.workflow_id == rec[2]
+    assert len(started) == 1 and started[0].media_id == MEDIA
+    assert page.dom.submit_clicked == 1
+    route.abort.assert_not_called()
+
+
+async def test_translated_duration_is_identified_by_numeric_axis() -> None:
+    page = FakePage()
+    page.dom.groups["duration"] = [Radio("", f"{n} วินาที") for n in (4, 6, 8, 10)]
+    await migrated_composer.MigratedComposer().apply_video_settings(page, _t2v(duration=8))
+    assert page.dom.groups["duration"][2].checked
 
 
 async def test_prompt_goes_into_the_contenteditable_not_the_textarea() -> None:

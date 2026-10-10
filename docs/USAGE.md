@@ -453,8 +453,9 @@ shots — no per-shot prompt wrangling or fragile image refs.
 How it works: entities are **project-scoped**, so you must generate **in the
 project that owns them** via `--project <id>` (this also means no throwaway
 scratch project is created). The CLI attaches each entity through the Flow editor's
-resource picker; the image submit then carries `referenceEntities`. Video identity
-references remain gated until the video result can be attributed to the exact entity.
+resource picker; the image submit then carries `referenceEntities`. Saved-Character
+video R2V supports count one with paired entity IDs and names, using pre-billing
+request validation and exact new-job attribution. Other entity video modes remain gated.
 Entities count toward the same per-model reference cap as `--ref`
 images. `--reference-entity` / `--project` / `--output` are **single-prompt only**.
 
@@ -493,17 +494,19 @@ gflow image t2i "@CaptainZoro on a rain-soaked neon rooftop, cinematic" --projec
 ```
 
 `@Name` Character references are available on supported image paths. On a
-project served by `flow.google.com`, the current video driver refuses entity
-references before submission while terminal attribution remains unverified.
-This is a gflow safety limit, not a claim about Flow's capabilities; no video
-Character-reference support is promised here.
+project served by `flow.google.com`, saved-Character video R2V is supported at
+count one with paired entity IDs and names. The native picker binds real entity
+chips, the submit is validated before billing, and the result is attributed to
+the exact new job. Other entity video modes remain pre-submit refusals.
+Successful reference binding does not guarantee visual likeness; review each output.
 Media/asset mentions remain image-only:
 
 | Path | Character `@Name` | Media/asset `@Name` |
 |---|---|---|
 | `image t2i` | ✅ | ✅ (in-project asset → `referenceImages`) |
 | `image i2i` | ✅ | ✅ |
-| `video t2v` / `i2v` / `r2v` | Refused on `flow.google.com` | ❌ — media-on-video is not implemented |
+| `video r2v` | Count one, paired entity IDs/names required on `flow.google.com`; output QC required | ❌ — media-on-video is not implemented |
+| `video t2v` / `i2v` | Refused on `flow.google.com` | ❌ — media-on-video is not implemented |
 
 Rules:
 - **`--project <id>` is required** — mentions resolve against that project's assets.
@@ -525,8 +528,8 @@ Rules:
 (`referenceEntities`) and dedupe against each other on supported paths: reach
 for `@Name` for the inline, by-name path — and `--reference-entity` when you'd
 rather pin an explicit entity id in a script. Both are available on `t2i`/`i2i`.
-The migrated video driver currently refuses Character references until terminal
-attribution is verified; `video i2v` also carries start/end frames instead.
+The migrated video driver supports the bounded saved-Character R2V path above;
+`video i2v` carries start/end frames instead and still refuses entity references.
 `--ref` is different: it
 attaches an arbitrary **image** (`referenceImages`), not a saved identity, and can
 be combined with a `@Name` for "this identity, in this look".
@@ -671,8 +674,11 @@ Options:
 > `--initial-frame` runs there too — **including with a local `--end-frame`**
 > (start+end interpolation, #639; see [`gflow video i2v`](#gflow-video-i2v)) — as does
 > `r2v` from local `--ref` files (see [`gflow video r2v`](#gflow-video-r2v)). An end frame
-> or start frame given by UUID or `@Name`, and references given by `@Name` or
-> `--reference-entity`, are not ported to the migrated composer yet. `image t2i` and local-file `image i2i` also run on a moved
+> or start frame given by UUID or `@Name` is not ported to the migrated composer yet.
+> Saved Characters work on `r2v` with count 1 and paired entity names: inline Character
+> mentions supply both, or pair `--reference-entity` with `--reference-entity-name`.
+> Other Character video modes remain refused. Binding and job attribution are checked,
+> but visual likeness still requires QC. `image t2i` and local-file `image i2i` also run on a moved
 > account; UUID/entity/instruction/Imagen-4 image forms still exit 36. `flow.google.com` forces the migrated composer,
 > `labs.google` switches it off — see [CONFIGURATION § GFLOW_CLI_FLOW_HOST](CONFIGURATION.md#gflow_cli_flow_host).
 
@@ -2093,7 +2099,7 @@ shell scripts can branch on the failure mode without parsing stderr.
 | `33` | — (`gflow doctor` verdict) | Doctor found warn/fail findings — a successful diagnosis, not an error class | Review the report; see [`gflow doctor`](#gflow-doctor) |
 | `34` | `SyncPartialError`    | `gflow data sync` failed on some projects but succeeded on others — completed writes stay committed | Retryable: re-run the same command; it resumes with what is still nameless (see [`gflow data sync`](#gflow-data-sync)) |
 | `35` | `ExtendUnavailableError` | No Veo extend model is orderable for this account and aspect — the extend family is tier-gated and there is no square variant. **Never auto-retry**: a tier gate does not clear on its own. |
-| `36` | `FlowHostMigratedError` | Flow served the project from `flow.google.com` and the request could not be represented by the migrated composer, or `GFLOW_CLI_FLOW_HOST=labs.google` disabled it. Supported today: `video t2v`; local-file video i2v/r2v; `image t2i`; local-file `image i2i`; and `gflow run --config` rows referencing an earlier row (`batch:N`) or a local file. Image UUID/entity/instruction/Imagen-4 forms and `image batch` remain unsupported. Not selector drift (23) | **Not retryable.** Use one of the supported forms, or the REST surface (`gflow project list`, `gflow data …`); follow #639 for the remaining matrix |
+| `36` | `FlowHostMigratedError` | Flow served the project from `flow.google.com` and the request could not be represented by the migrated composer, or `GFLOW_CLI_FLOW_HOST=labs.google` disabled it. Supported today: `video t2v`; local-file video i2v/r2v; count-one saved-Character video r2v with paired entity IDs/names and exact job attribution; `image t2i`; local-file `image i2i`; and `gflow run --config` rows referencing an earlier row (`batch:N`) or a local file. Image UUID/entity/instruction/Imagen-4 forms and `image batch` remain unsupported. Not selector drift (23) | **Not retryable.** Use one of the supported forms, or the REST surface (`gflow project list`, `gflow data …`); follow #639 for the remaining matrix |
 | `37` | `InsufficientCreditsError` | The account's balance is short **for the model it asked for**, so Flow **replaced** the submit control with its `Insufficient credits warning` instead of disabling it. Short, not necessarily empty: measured 2026-09-07, an account holding **50** credits requesting `--model veo-quality` (**100**) rendered the warning. Explicitly **not** selector drift (23): reporting it as drift told users to file a frontend bug over a credit shortfall | Check the balance with `gflow credits user`, then pick a cheaper `--model` (`veo-lite` costs 10), top up, or wait for the allowance to reset. Nothing was submitted, so no credit was spent. `gflow image` draws on a separate daily quota and may still work |
 | `38` | `FlowAccountChooserError` | The post-migration hop landed on Google's account chooser and the profile's recorded account (`.gflow_account`) could not be selected automatically (row absent, click-through did not return to the editor, or `--account` mismatch) | **Not retryable**: run `gflow auth login --profile <name>` and complete the chooser manually, while signed in as the recorded account (re-run `gflow auth login` if the chooser offers a different session) |
 | `39` | `FlowAccessUnavailableError` | Flow loaded and routed to its own "you don't have access" screen (`<flow-pinhole-unavailable-screen>`): this Google account has no Flow entitlement. Detected by component, not by URL — the hop is client-side (`flow.google.com/` answers 200) and the path varies (`/unavailable`, `/u/8/unavailable`). Explicitly **not** auth expiry (3/8) and **not** selector drift (23): nothing expired and nothing drifted | **Not retryable, and signing in again cannot change it.** Flow needs an age-verified account in a supported region on a Google AI Plus/Pro/Ultra or qualifying Workspace plan — check which applies at [Google's eligibility page](https://support.google.com/flow/answer/16353333) and open https://flow.google.com in a browser on this account to confirm |

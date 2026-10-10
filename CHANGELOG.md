@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Saved Characters can generate count-one R2V through CLI and native MCP on
+  `flow.google.com`. Entity slots and prompt text are validated before billing;
+  null submit acknowledgements are attributed by fresh project baseline and exact
+  rich prompt, then scoped by workflow/media identity. Old or ambiguous jobs cannot
+  become the result, and uncertain outcomes never trigger automatic resubmission.
+  The measured non-CAE VIDEO schema uses native media/workflow slot ordering.
+  Binding is verified separately from creative QC; Character likeness is not guaranteed.
+
 - AutoFlow's migrated R2V duration safety refusal now carries explicit pre-submit
   proof (`submission_state`, requested setting and safe next action) through CLI
   and native MCP errors. It retains exit 11 and forbids automatic retries. Other

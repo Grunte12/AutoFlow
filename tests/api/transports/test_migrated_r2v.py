@@ -373,20 +373,12 @@ async def test_the_wrong_entity_is_refused_even_though_a_chip_landed() -> None:
         )
 
 
-def test_character_references_are_still_refused_until_a_submit_completes() -> None:
-    """The attach half is ported and proven; the submit half is not, so the gate stays.
-
-    `attach_character_entities` is verified live — the chip commits with the right
-    entity_id and Flow loads the character's voice — but the submit that follows produced
-    no reply in three runs. Until an entity-bound generation actually completes, refusing
-    instantly (exit 36) beats a 60-second timeout, so the gate must NOT be relaxed just
-    because the attach works. This test is the thing that stops that happening by
-    accident.
-    """
+def test_saved_characters_require_paired_names_for_the_verified_r2v_path() -> None:
+    """Only the guarded count-one R2V path is supported; unnamed entities stay refused."""
     from gflow_cli.api.transports.migrated_composer import _unported_form
 
     assert _unported_form(_r2v(reference_entities=("ent-kael",))) is not None
     assert (
         _unported_form(_r2v(reference_entities=("ent-kael",), reference_entity_names=("Kael",)))
-        is not None
+        is None
     )

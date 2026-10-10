@@ -47,6 +47,14 @@ close Chrome yourself. On the measured account, `/about` was gone on the next ru
 
 ### Flow is migrating to `flow.google.com`; generation coverage is partial but includes images
 
+AutoFlow 0.83.0a2 update: saved Characters now complete count-one R2V through native
+MCP using paired IDs/names. Request entity slots and prompt text are checked before
+billing, and null acknowledgements are followed by exact new-job attribution. Other
+Character video modes remain refused. The one paid verification passed transport and
+download checks but failed creative likeness QC; see
+[the source-preview evidence](docs/LIVE_VERIFICATION_v0.83.0a2.md). Do not infer that a
+verified entity binding guarantees the model preserves age, fur markings or accessories.
+
 - **Status:** Open (partially resolved) · **Severity:** High for unported forms · **Affected:** on accounts the rollout has reached, `gflow video t2v`, local-file `video i2v` / `r2v`, `gflow image t2i`, and local-file `gflow image i2i` now run on the migrated host. Image mode supports Nano Banana 2 / 2 Lite / Pro, all five aspect ratios its radiogroup renders (16:9, 4:3, 1:1, 3:4, 9:16 — 3:4 appeared by 2026-09-17, #864), and count 1–4. Image refs by UUID, `@Name` / `--reference-entity`, Agent instructions, Imagen 4, video frame refs by UUID/name, scenes, extend, instructions and tools are not ported yet and fail before submit. **`character create` is NOT in that list any more** — it works on the migrated host. `character list` does NOT: it reads the retired labs `projectInitialData` route and exits 7, measured 2026-09-20 both on `auto` and with `GFLOW_CLI_FLOW_HOST=flow.google.com` (#875). Of the remainder, only the i2v-by-UUID case rests on a positive observation of absence (the Frames picker tiles carry no media id); `scenes`, `extend`, `instructions` and `tools` remain *unported by gflow*, never proven impossible on the host.
 - **Tracked:** [#639](https://github.com/ffroliva/gflow-cli/issues/639) · Reported 2026-09-02 against 0.59.0, 0.62.1, 0.63.0 and 0.65.0
 - **Confirmed live 2026-09-03 on a second, independent account** (`ffroliva`) — see [LIVE_VERIFICATION_v0.66.0](docs/LIVE_VERIFICATION_v0.66.0.md). A read-only probe of the migrated origin measured `i_total: 0`, reproducing the reporter's central measurement.

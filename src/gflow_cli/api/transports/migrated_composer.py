@@ -64,6 +64,11 @@ from gflow_cli.api.transports.batchexecute import (
     parse_frames,
     rpc_errors,
 )
+from gflow_cli.api.transports.saved_character_video import (
+    CharacterSubmission,
+    attributed_character_record,
+    character_submission,
+)
 from gflow_cli.api.video import (
     I2V_DEFAULT_MODEL,
     Aspect,
@@ -500,56 +505,14 @@ def _unported_form(request: GenerateVideoRequest) -> str | None:
     or ``@Name`` has nothing to anchor on yet. The End chip itself was measured on
     2026-09-15 (scripts/dev/spike_migrated_end_frame.py): two empty chips, Start
     and End by text, and clicking the End chip opens the library picker."""
-    # Character entities are a different attach surface (a chip with an entity_id, in a
-    # different wire slot) and unported. This check is MODE-INDEPENDENT and must stay
-    # ahead of every early return (#716): it used to live inside the R2V branch, so a
-    # t2v request returned `None` here without its entities ever being inspected, and
-    # nothing downstream attaches one — `attach_start_frame` is i2v-only,
-    # `attach_references` is r2v-only, the `read_chips` verification is r2v-only. The
-    # result was a BILLED generation with the entity silently dropped, which is strictly
-    # worse than exit 36: the refusal is free and the clip is a stranger.
-    #
-    # `migrated_can_serve` also refuses on `reference_entities`, but it only feeds
-    # `prefer_migrated`, and an account Flow has already moved is routed by its URL
-    # without consulting it — so that refusal is unreachable for exactly the accounts
-    # that need it. This one is on the path every request takes.
-    if request.reference_entities:
-        # STILL REFUSED — but NOT because the backend rejects it. The port is half done
-        # in a narrower way than previously recorded here (#723).
-        #
-        # What works: `attach_character_entities` drives the `@` picker, commits the
-        # chip, and verifies it carries data-reference-type="entity" with the requested
-        # id. `migrated.character_entities_attached` fires and Flow loads the
-        # character's voice sample. And the SUBMIT IS ACCEPTED: measured 2026-09-07,
-        # entity-bound submissions appear in Flow's own gallery as **Queued** and
-        # proceed. Nothing is refused server-side.
-        #
-        # What breaks is the OBSERVER, and the mechanism is exact:
-        #
-        #   MZZa6b -> [["wrb.fr","MZZa6b",null,null,null,[5],"generic"]]
-        #
-        # The submit reply carries a NULL payload, so it never names a media id and the
-        # `submitted` future in submit_and_observe never resolves. That wait is bounded
-        # by SUBMIT_REPLY_BUDGET_S (60 s), a value calibrated on runs where "the submit
-        # reply arrived 4.0-4.6 s after the click" — i.e. a plate-based generation
-        # against an idle queue. So the run times out (exit 9, TransportTimeoutError)
-        # while the job sits in Flow's queue and completes on its own.
-        #
-        # This is also what the ORIGINAL note here described as "the submit never
-        # produces a reply, three runs, 60 s each, cause unknown". Three timeouts
-        # against a queue, read as a refusal. Two later comments (including one of
-        # mine) hardened that misreading further; both were wrong.
-        #
-        # Queue latency is not incidental: Flow documents a limit of FIVE concurrent
-        # generations, and rate-limits per-minute throughput after heavy daily use, so
-        # 60 s is routinely too short in real production.
-        #
-        # THE FIX, when someone takes it: on a null submit payload, fall through to the
-        # status poll (jwpduf/as29s) keyed on the project instead of requiring the
-        # submit reply to name the media id, and make the budget configurable. The guard
-        # stays only until that lands, because today the CLI would report a timeout on a
-        # generation that is actually running — worse than an honest refusal.
-        return "character references"
+    # Saved Characters use the measured R2V/count-one/native-name contract.
+    # Other modes stay refused before a paid click; never silently drop identity.
+    if request.reference_entities and (
+        request.mode is not Mode.R2V
+        or request.count != 1
+        or len(request.reference_entity_names) != len(request.reference_entities)
+    ):
+        return "character references (require r2v, count=1 and matching names)"
     if request.mode is Mode.T2V:
         return None
     if request.mode is Mode.R2V:
@@ -579,8 +542,9 @@ def migrated_can_serve(request: GenerateVideoRequest, project_id: str | None) ->
     """Can the migrated composer take this request as it stands? Text-to-video, or
     image-to-video / reference-to-video from **local** files (start and end frames
     alike), in an existing project, with a model the new host offers (or none).
-    Everything else — a frame or reference by UUID or ``@Name``, character
-    references, a model this host has not been observed to offer — is not ported
+    Count-one R2V with saved Character IDs and paired names is also supported.
+    Everything else — a frame or media reference by UUID or ``@Name``, or a model
+    this host has not been observed to offer — is not ported
     yet, so an account still served labs.google keeps the labs driver for it. A
     request with no project is not decided here: ``FlowApiClient.generate_video``
     creates one before any route is chosen (#864).
@@ -600,8 +564,6 @@ def migrated_can_serve(request: GenerateVideoRequest, project_id: str | None) ->
     moved is routed by its URL and never reaches this question — for it,
     ``--model veo-lite-lp`` is driven by its matcher instead of refused outright."""
     if _unported_form(request) is not None or not project_id:
-        return False
-    if request.reference_entities:
         return False
     return request.model is None or request.model in VIDEO_MODEL_MENU_LABELS
 
@@ -1697,6 +1659,29 @@ class MigratedComposer:
         )
         raise UiSelectorDriftError(detail=detail)
 
+    async def _duration_radio(self, pane: Any, seconds: int) -> Any | None:
+        """Measured duration domains; numeric units work in translated panes too."""
+        groups = pane.locator(RADIOGROUP)
+        values: list[list[int | None]] = await groups.evaluate_all(
+            """groups => groups.map(g => [...g.querySelectorAll('[role=radio]')].map(r => {
+                if (!r.getClientRects().length) return null;
+                const m = (r.textContent || '').match(/^\\s*(\\d+)\\D*$/u);
+                return m ? Number(m[1]) : null;
+            }))"""
+        )
+        candidates = [
+            index
+            for index, row in enumerate(values)
+            if all(value is not None for value in row)
+            and sorted(value for value in row if value is not None) in ([4, 6, 8], [4, 6, 8, 10])
+        ]
+        if len(candidates) > 1:
+            raise UiSelectorDriftError("migrated host: ambiguous duration controls")
+        if not candidates or seconds not in values[candidates[0]]:
+            return None
+        index = candidates[0]
+        return groups.nth(index).locator(RADIO).nth(values[index].index(seconds))
+
     async def _pin_r2v_duration(self, page: Page, pane: Any) -> None:
         """Bind the base duration for a references run, when this pane offers durations.
 
@@ -1735,6 +1720,10 @@ class MigratedComposer:
             else radios.filter(has_text=_exact(wanted))
         )
         target = matches.first
+        if axis == "duration" and not await target.count():
+            numeric = await self._duration_radio(pane, int(wanted.removesuffix("s")))
+            if numeric is not None:
+                target = numeric
         if not await target.count():
             groups = await pane.locator(RADIOGROUP).count()
             # Only the duration row is a per-account/model capability (#650) — a missing
@@ -1761,7 +1750,7 @@ class MigratedComposer:
             return
         await target.click(timeout=4000)
         await asyncio.sleep(0.2)
-        if await matches.first.get_attribute("aria-checked") == "true":
+        if await target.get_attribute("aria-checked") == "true":
             return
         raise UiSelectorDriftError(
             detail=(
@@ -2604,6 +2593,9 @@ class MigratedComposer:
         expect_media_id: str | None = None,
         expect_end_media_id: str | None = None,
         expect_reference_ids: tuple[str, ...] = (),
+        expect_entity_ids: tuple[str, ...] = (),
+        baseline_media_ids: frozenset[str] | None = None,
+        expect_prompt: str | None = None,
     ) -> GenerationRecord:
         """Click submit, then read the page's own submit / ``jwpduf`` / ``as29s``
         replies until the record is terminal. Fires ``on_started`` as soon as the
@@ -2619,6 +2611,35 @@ class MigratedComposer:
         loop = asyncio.get_running_loop()
         submitted: asyncio.Future[GenerationRecord] = loop.create_future()
         route_error: asyncio.Future[WireFormatError] = loop.create_future()
+        entity_submit: CharacterSubmission | None = None
+        expected_project = project_id if project_id and UUID_RE.fullmatch(project_id) else None
+
+        async def guard_entities(route: Any, request: Any) -> None:
+            nonlocal entity_submit
+            body = _post_data(request)
+            rid = _rpcid(str(request.url)) or _body_rpcid(body)
+            if rid not in SUBMIT_RPCS and "_r2v_" not in body:
+                await route.continue_()
+                return
+            try:
+                if entity_submit is not None or baseline_media_ids is None or project_id is None:
+                    raise WireFormatError(
+                        "saved Character submit lacks a fresh baseline or is duplicate"
+                    )
+                raw = request.post_data or ""
+                entity_submit = character_submission(
+                    raw, project_id, expect_entity_ids, expect_prompt
+                )
+                if expect_reference_ids:
+                    problem = _r2v_body_problem(body, "MZZa6b", expect_reference_ids)
+                    if problem:
+                        raise WireFormatError(problem, route=f"batchexecute:{rid}")
+            except WireFormatError as exc:
+                if not route_error.done():
+                    route_error.set_result(exc)
+                await route.abort()
+                return
+            await route.continue_()
 
         def on_request(request: Any) -> None:
             url = str(getattr(request, "url", ""))
@@ -2720,8 +2741,12 @@ class MigratedComposer:
                 # whose absence it is trying to explain (#639).
                 seen_submit_rpcs.add(rid)
                 if rid in SUBMIT_RPCS and not submitted.done():
+                    # Saved-Character submit may acknowledge with a null payload.
+                    # Its guarded rich prompt is the correlation key, not a first UUID.
+                    if expect_entity_ids and payload is None:
+                        continue
                     try:
-                        rec = generation_record(rid, payload)
+                        rec = generation_record(rid, payload, project_id=expected_project)
                     except WireFormatError as exc:
                         submitted.set_exception(exc)
                         return
@@ -2735,9 +2760,29 @@ class MigratedComposer:
                     )
                     submitted.set_result(rec)
                     _settle(rec)
+                elif rid in STATUS_RPCS and not submitted.done() and entity_submit is not None:
+                    try:
+                        rec = attributed_character_record(
+                            payload, entity_submit, baseline_media_ids or frozenset()
+                        )
+                    except WireFormatError as exc:
+                        submitted.set_exception(exc)
+                        return
+                    if rec is not None:
+                        workflow["id"] = rec.workflow_id
+                        log.info(
+                            "migrated.character_submit_attributed",
+                            workflow_id=rec.workflow_id,
+                            media_id=rec.media_id,
+                            status=rec.status,
+                        )
+                        submitted.set_result(rec)
+                        _settle(rec)
                 elif rid in STATUS_RPCS and workflow:
                     try:
-                        rec = generation_record(rid, payload)
+                        rec = generation_record(
+                            rid, payload, project_id=expected_project, workflow_id=workflow["id"]
+                        )
                     except WireFormatError:
                         continue
                     if rec.workflow_id != workflow["id"]:
@@ -2755,6 +2800,8 @@ class MigratedComposer:
         # and refusing that is free while the generation is not. `on_request` returns
         # early for a t2v submit it has nothing to assert about.
         page.on("request", on_request)
+        if expect_entity_ids:
+            await page.route("**/data/batchexecute*", guard_entities)
         try:
             submit = page.locator("button").filter(has=_ligature(page, "arrow_forward")).first
             if not await submit.count():
@@ -2787,7 +2834,9 @@ class MigratedComposer:
             # unanswerable, which is the worst place in this driver to lose attribution.
             await self._click(page, submit, named=SUBMIT_BUTTON, timeout=5000)
             log.info("migrated.submit_clicked")
-            budget = min(SUBMIT_REPLY_BUDGET_S, poll_timeout_s)
+            budget = (
+                poll_timeout_s if expect_entity_ids else min(SUBMIT_REPLY_BUDGET_S, poll_timeout_s)
+            )
             await asyncio.wait(
                 {submitted, route_error}, timeout=budget, return_when=asyncio.FIRST_COMPLETED
             )
@@ -2833,6 +2882,8 @@ class MigratedComposer:
                 submitted.exception()
             page.remove_listener("response", on_response)
             page.remove_listener("request", on_request)
+            if expect_entity_ids:
+                await page.unroute("**/data/batchexecute*", guard_entities)
 
     async def _verify_submit_target(self, page: Page, submit: Locator) -> None:
         """Prove the submit button is visible and receives pointer events."""
@@ -3246,6 +3297,41 @@ async def run_video(
         )
     log.info("migrated.dispatch", project_id=pid, mode=request.mode.value)
     composer = MigratedComposer()
+    baseline_media_ids: frozenset[str] | None = None
+    if request.reference_entities:
+        from gflow_cli.api.transports.native_character import parse_native_characters
+        from gflow_cli.api.transports.native_character_ui import (
+            _read_project_payload,  # pyright: ignore[reportPrivateUsage] -- native read, no writes
+        )
+
+        payload: Any = await _read_project_payload(page, pid, timeout_s=20)
+        characters = parse_native_characters(payload, pid)
+        current = {row.character.entity_id: row.character.display_name for row in characters}
+        if any(
+            current.get(entity) != name
+            for entity, name in zip(
+                request.reference_entities, request.reference_entity_names, strict=True
+            )
+        ):
+            raise ReferenceNotFoundError(
+                "saved Characters do not match this project's IDs and names"
+            )
+        if (
+            not isinstance(payload, list)
+            or len(cast("list[Any]", payload)) < 3
+            or not isinstance(payload[2], list)
+        ):
+            raise WireFormatError("saved Character generation requires a native media baseline")
+        media_rows = cast("list[Any]", payload[2])
+        baseline_media_ids = frozenset(
+            row[0]
+            for row in media_rows
+            if isinstance(row, list)
+            and len(cast("list[Any]", row)) > 2
+            and row[1] == pid
+            and isinstance(row[0], str)
+            and UUID_RE.fullmatch(row[0])
+        )
     await composer.ensure_editor(page, pid)
     await composer.apply_video_settings(page, request)
     media_id: str | None = None
@@ -3290,6 +3376,9 @@ async def run_video(
         expect_media_id=media_id,
         expect_end_media_id=end_media_id,
         expect_reference_ids=reference_ids,
+        expect_entity_ids=tuple(request.reference_entities),
+        baseline_media_ids=baseline_media_ids,
+        expect_prompt=request.prompt if request.reference_entities else None,
     )
     status = VideoStatus(
         media_id=record.media_id,

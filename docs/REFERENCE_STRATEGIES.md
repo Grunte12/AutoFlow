@@ -25,7 +25,7 @@ transports.
 
 | I want to… | Use | Why |
 |---|---|---|
-| Reference a **saved Character** by name, inline | `@Name` in the prompt | Resolves to `referenceEntities`; the model anchors on that entity. Works on every generation path. |
+| Reference a **saved Character** by name, inline | `@Name` in the prompt | Resolves to `referenceEntities` on supported paths. On `flow.google.com`, video requires count-one R2V; identity likeness is not guaranteed. |
 | Reference a Character by **explicit id** in a script | `--reference-entity <entityId>` (`t2i`/`i2i`/`t2v`/`r2v`) | Same wire as `@Name`, no name-resolution ambiguity. **Not available on `i2v`** (its DTO rejects reference entities). |
 | Reference a **saved media asset** (generated/uploaded) by name | `@Name` in the prompt | Resolves to the asset's UUID → `referenceImages`, zero re-upload. |
 | Reference a **one-off / arbitrary image** or a look | `--ref <path>` (`i2i`, `r2v`) or `--ref <uuid>` (`i2i` only) | Stages `referenceImages` directly; no saved identity needed. |
@@ -34,6 +34,12 @@ transports.
 | Anchor an **identity *and* a look** in one shot | Both — a Character mention **and** a `--ref` | They complement (entity + image), and identical references dedupe, within the model's reference cap. |
 
 ### Same wire, and they dedupe
+
+On `flow.google.com`, the verified saved-Character video path is `r2v` with count 1
+and paired entity names (inline Character mentions resolve both IDs and names).
+Other entity video modes and entity image generation remain refused there. The driver
+checks request binding and exact new-job attribution; this is not a guarantee that
+the model preserves age, clothing or every marking. Inspect the output against the sheet.
 
 `@Name` (character) and `--reference-entity` are not two transports — the mention resolver stages the
 **same** `referenceEntities:[{entityId}]` the picker/`--reference-entity` path produces (design spec
