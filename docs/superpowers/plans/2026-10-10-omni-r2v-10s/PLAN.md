@@ -44,6 +44,9 @@ Tool repair delivery complete: owner commit
 local preview `0.83.0a5`; public `autoflow.video` schema remains
 `bfdf7cfeb6004aa6`. Native daemon and LinkHub restarted while idle.
 
-User-side acceptance remains a separate gate: the Affiliate chat is checking the
-approved inputs and one authorized paid clip. Neither rendered quality nor its
-separate Character-update replay is declared passed here.
+User-side acceptance is a separate gate: the Affiliate chat completed the
+same-operation Character-update replay and the one authorized paid clip.
+Transport passed; creative identity FAILED (cartoon/human instead of the approved
+puppy/kitten). No further generation, Character mutation or retry is authorized.
+The metadata reader also hardcodes personality/voice to null, so stored
+personalization remains unknown. See the preview receipt's acceptance section.

@@ -52,6 +52,37 @@ path and creative QC must still be accepted by the owner's Affiliate chat.
 Character image-update acceptance replay is a separate check; it is not implied
 by this generation-input capture.
 
+## Independent Affiliate acceptance — generation works, identity rejected
+
+The owner's Affiliate chat tested the installed public HTTP LinkHub surface.
+Its same-operation Character image-update replay completed and preserved the
+approved portrait/body bindings without another upload. It then submitted only
+the single authorized 10-second request. That job completed with a decodable
+10.005-second, 720x1280 H.264/AAC clip; no automatic retry followed.
+
+**Creative acceptance FAILED.** The sampled frames (every 0.2 seconds), a full
+first frame and independent QC show a known cartoon character plus a human,
+not the approved puppy and kitten. Two phones appear despite the one-phone
+instruction. Local cached ASR retained the requested dialogue, but cannot
+certify speaker/voice identity. The candidate is not an approved master.
+
+Read-only diagnosis establishes two limitations, not a proven rendering cause:
+
+- The submitted text named the saved Characters but did not explicitly state
+  puppy/kitten species, age and approved gear. A name collision is a hypothesis,
+  not proof of why the images were ignored.
+- `native_character.py` currently hardcodes `personality=None` and `voice=None`
+  in its project parser. Public null readback cannot establish empty stored
+  metadata. Import's metadata verification observes personality at
+  `character_info[2]`; a verified read path is required before blaming missing
+  personalization. Character images/personality were not changed during diagnosis.
+
+Input binding and successful transport are not successful character identity.
+Keep paid generation stopped until the owner reviews the failed candidate and
+authorizes a new creative test. This preview is **not confirmed ready for
+identity-consistent production**. Private job IDs, inputs and QC artifacts remain
+in the owner's Affiliate repository, not in public documentation.
+
 ## Delivery gates
 
 - Focused transport tests: 36 passed; MCP parity/server tests: 61 passed;
