@@ -4,10 +4,10 @@
 
 ## AutoFlow owner source preview
 
-0.83.0a5 is an owner-repository preview, not a signed or published release.
-Explicit Omni Flash R2V at 10 seconds has native MCP queue/composer input proof
-with two Characters and two images; paid rendering and creative acceptance are
-separate. See [evidence and limitations](LIVE_VERIFICATION_v0.83.0a5.md).
+0.83.0a6 is an owner-repository preview, not a signed or published release.
+Native Character personality readback is repaired. A paid Omni R2V job completed
+but failed Character identity QC; image consumption and likeness remain unresolved.
+See [evidence and limitations](LIVE_VERIFICATION_v0.83.0a6.md).
 
 ## Current release
 

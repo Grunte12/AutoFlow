@@ -693,7 +693,7 @@ def _render_character_detail(c: Character) -> None:
     console.print(f"  entity_id:  {c.entity_id}")
     console.print(f"  project_id: {c.project_id}")
     console.print(f"  voice:      {c.voice or '-'}")
-    console.print(f"  personality:{c.personality or '-'}")
+    console.print(f"  personality:{c.personality if c.personality is not None else '-'}")
     console.print(f"  refs ({len(c.workflow_ids)}):")
     for wf in c.workflow_ids:
         console.print(f"    {wf}")

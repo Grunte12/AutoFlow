@@ -2,8 +2,9 @@
 
 Existing Character portrait/full-body replacement: [USAGE](USAGE.md#gflow-character-update-images)
 and [MCP](MCP.md). Use exact IDs and a stable operation UUID; no generation or new Character.
-See the [0.83.0a5 source-preview verification](LIVE_VERIFICATION_v0.83.0a5.md)
-for Omni R2V 10-second input binding, and the
+See the [0.83.0a6 source-preview verification](LIVE_VERIFICATION_v0.83.0a6.md)
+for personality readback and the unresolved rendered-identity failure,
+the [0.83.0a5 verification](LIVE_VERIFICATION_v0.83.0a5.md) for Omni R2V input binding, and the
 [0.83.0a4 verification](LIVE_VERIFICATION_v0.83.0a4.md) for Character image updates.
 
 Welcome to the `gflow-cli` documentation. This index is the routing layer: it tells you where each topic lives. Keep `README.md` slim (high-level overview + install) and document deep details here.

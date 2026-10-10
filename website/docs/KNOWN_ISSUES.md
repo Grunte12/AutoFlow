@@ -14,6 +14,19 @@ Living list of behaviour that's broken, surprising, or limited by design — alo
 
 ## Open
 
+### Saved Character IDs can bind while Omni renders the wrong identity
+
+- **Status:** Open · **Severity:** High for Character video work.
+- **Evidence:** [0.83.0a6 diagnosis](https://github.com/ffroliva/gflow-cli/blob/main/docs/LIVE_VERIFICATION_v0.83.0a6.md).
+  The exact production job retained both native entity IDs and rich-prompt names,
+  but its completed clip rendered unrelated identities. Stored personalities and
+  portrait/body bindings were correct. Server/model image consumption is not yet
+  observable; entity-ID validation alone cannot establish it.
+- **Operation:** keep affected paid generation stopped. Do not automatically retry
+  or claim a metadata-reader repair fixes video likeness. Plain-media and native
+  Character references use distinct wire slots; do not silently replace one with
+  the other or substitute appearance prose as an accepted identity fix.
+
 ### Every command lands on `flow.google.com/about` (exit 31) while `gflow auth status` says the session is fine
 
 - **Status:** Open · **Severity:** High for the affected account (nothing runs) · **Affected:** measured on one account (`my-profile`, 2026-09-23). Other `/about` occurrences are not yet shown to share the cause.

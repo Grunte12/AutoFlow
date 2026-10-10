@@ -33,10 +33,10 @@
 
 ## Why gflow-cli?
 
-AutoFlow source preview 0.83.0a5 admits explicit Omni Flash R2V at 10 seconds.
-Its blocked native MCP verification preserved two Characters and two images;
-this is input proof, not a rendered-video guarantee. See the
-[verification and limitations](docs/LIVE_VERIFICATION_v0.83.0a5.md).
+AutoFlow source preview 0.83.0a6 fixes saved Character personality readback.
+The earlier Omni Flash R2V input capture preserved Character IDs, but the paid
+identity test failed; this preview does not claim to repair video likeness. See
+[verification and limitations](docs/LIVE_VERIFICATION_v0.83.0a6.md).
 This owner-repository preview is not a PyPI or Docker registry release.
 
 You have a Google account with Flow access, you have Veo credits, and you run real batch work. gflow-cli gives you:

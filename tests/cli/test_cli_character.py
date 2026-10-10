@@ -168,6 +168,37 @@ def test_show_by_name_happy_path(monkeypatch):
     assert "Alpha" in res.output
 
 
+def test_show_human_output_distinguishes_empty_and_missing_personality(monkeypatch):
+    empty = Character(
+        entity_id="eid-empty",
+        display_name="Empty personality",
+        project_id="proj-1",
+        workflow_ids=(),
+        voice=None,
+        personality="",
+        thumbnail_media_id=None,
+    )
+    _patch(monkeypatch, get_result=empty)
+    empty_res = CliRunner().invoke(
+        main,
+        ["character", "show", "--project", "proj-1", "--id", "eid-empty"],
+        catch_exceptions=False,
+    )
+    assert empty_res.exit_code == 0
+    empty_line = next(line for line in empty_res.output.splitlines() if "personality:" in line)
+    assert empty_line.partition("personality:")[2] == ""
+
+    _patch(monkeypatch, get_result=_CHAR_B)
+    missing_res = CliRunner().invoke(
+        main,
+        ["character", "show", "--project", "proj-1", "--id", "eid-beta"],
+        catch_exceptions=False,
+    )
+    assert missing_res.exit_code == 0
+    missing_line = next(line for line in missing_res.output.splitlines() if "personality:" in line)
+    assert missing_line.partition("personality:")[2] == "-"
+
+
 def test_show_json_output(monkeypatch):
     _patch(monkeypatch, get_result=_CHAR_A)
     res = CliRunner().invoke(

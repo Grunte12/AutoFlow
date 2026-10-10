@@ -28,10 +28,14 @@ def _entity(
     name: str = "Momo",
     workflow_ids: tuple[str, ...] = (WORKFLOW,),
     thumbnail_id: str | None = MEDIA,
+    personality: Any = None,
+    include_personality: bool = True,
 ) -> list[Any]:
     """A sanitized native entity row matching the captured positional schema."""
     image_references = [[workflow_id] for workflow_id in workflow_ids]
-    character_info = [1, name, [image_references]]
+    character_info = [1, name, [image_references, None]]
+    if include_personality:
+        character_info[2].append(personality)
     return [project_id, entity_id, None, character_info, thumbnail_id, [1086, 1448], [1, 2], [3, 4]]
 
 
@@ -85,11 +89,47 @@ def test_native_character_parser_returns_only_stable_character_fields() -> None:
     assert "fixture-token" not in serialized
 
 
+@pytest.mark.parametrize("personality", ["Warm and observant", "敏锐、温柔 🐈", ""])
+def test_native_character_parser_preserves_personality(personality: str) -> None:
+    parsed = parse_native_characters(_payload(entities=[_entity(personality=personality)]), PROJECT)
+
+    assert parsed[0].character.personality == personality
+
+
+@pytest.mark.parametrize("personality", [None, pytest.param("missing", id="missing")])
+def test_native_character_parser_keeps_absent_personality_none(personality: str | None) -> None:
+    entity = (
+        _entity(include_personality=False)
+        if personality == "missing"
+        else _entity(personality=personality)
+    )
+
+    assert (
+        parse_native_characters(_payload(entities=[entity]), PROJECT)[0].character.personality
+        is None
+    )
+
+
+@pytest.mark.parametrize("personality", [[], {"secret": "PRIVATE_PERSONALITY_SENTINEL"}, 17, True])
+def test_native_character_parser_rejects_malformed_personality(personality: Any) -> None:
+    with pytest.raises(WireFormatError) as exc_info:
+        parse_native_characters(_payload(entities=[_entity(personality=personality)]), PROJECT)
+    assert "PRIVATE_PERSONALITY_SENTINEL" not in str(exc_info.value)
+
+
 def test_verified_parser_returns_exact_workflow_media_pair() -> None:
     parsed = parse_verified_native_character(_payload(), PROJECT, ENTITY)
 
     assert parsed.character.entity_id == ENTITY
     assert parsed.workflow_media_bindings == ((WORKFLOW, MEDIA),)
+
+
+def test_verified_parser_preserves_personality() -> None:
+    parsed = parse_verified_native_character(
+        _payload(entities=[_entity(personality="敏锐、温柔 🐈")]), PROJECT, ENTITY
+    )
+
+    assert parsed.character.personality == "敏锐、温柔 🐈"
 
 
 def test_missing_referenced_workflow_is_not_verified() -> None:

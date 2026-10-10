@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Native Character list/show now read the stored personality field instead of
+  reporting a false null through CLI and MCP. Missing/null values remain null;
+  malformed non-text values fail safely. This readback repair does not establish
+  that a video model consumed Character images or fix a rejected likeness.
+
 - Explicit Omni Flash R2V at 10 seconds is admitted after a non-dispatched native
   MCP capture verified the model key, count one, exact prompt, two saved Characters
   and two image references. Other non-8s combinations remain refused as unverified;

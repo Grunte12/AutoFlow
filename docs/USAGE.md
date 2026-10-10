@@ -1331,9 +1331,10 @@ Shows one character's detail (entity id, project, voice, personality, reference
 workflow ids). Provide **exactly one** of `--id` or `--name`. An ambiguous
 `--name` (multiple characters share it) exits with code **11**.
 
-On `flow.google.com`, native list/show readback currently omits voice and
-personality. A null value means those fields were not returned or verified; it
-does not prove that Flow has no saved value.
+On `flow.google.com`, native list/show returns stored personality text unchanged.
+Missing/null personality stays null; malformed non-text values are refused.
+Voice remains unverified: its null does not prove that Flow has no saved voice.
+Readback and entity binding do not guarantee a generated Character's likeness.
 
 ### `gflow character rm`
 

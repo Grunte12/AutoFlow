@@ -147,8 +147,10 @@ The server registers three protocol surfaces:
   entities with their **entity ids** — read-only and browser-driven. This is how an
   agent discovers what it can attach: an `entity_id` goes to `reference_entities`,
   and a `display_name` can be used as an image `@Name` mention. An empty list means
-  the project genuinely has none. On the native `flow.google.com` readback, `voice`
-  and `personality` are not currently returned; null means unverified, not absent.
+  the project genuinely has none. Native `flow.google.com` list/show preserves
+  the stored `personality` text; null means the field is missing or null in the
+  native response. `voice` remains unverified; its null does not prove absence.
+  Metadata and entity binding do not guarantee rendered likeness.
 * `gflow_character_show(project, entity_id, name, profile)`: Shows one character by id or exact display name (exactly one selector required). An ambiguous name is refused rather than resolved arbitrarily — which is the reason to prefer the id. Read-only; drives a browser session.
 * `gflow_character_voices()`: Lists the preset voices available for Character TTS (name, description, sample URL). A static in-process lookup — no network, no browser, no profile, no cost. Call it to pick a valid voice name.
 * `gflow_list_projects(profile, limit, offset)`: Queries the SQLite catalog for recent generation folders, paginated — the response carries `count` (rows in this page), `offset`, `has_more`, and `next_offset` (pass it back as `offset` for the next page; `null` on the last page).

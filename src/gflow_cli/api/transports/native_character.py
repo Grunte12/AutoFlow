@@ -108,6 +108,9 @@ def _character_fields(row: object, project_id: str) -> _CharacterFields | None:
         _invalid("character display name must be a nonempty string")
 
     character_info = _as_list(entity_info[2], "character info")
+    personality = character_info[2] if len(character_info) > 2 else None
+    if personality is not None and not isinstance(personality, str):
+        _invalid("character personality must be a string or null")
     # Flow also returns valid empty Characters as character_info=[] (not [[]]).
     raw_references = _as_list(character_info[0], "image references") if character_info else []
     workflow_ids: list[str] = []
@@ -128,7 +131,7 @@ def _character_fields(row: object, project_id: str) -> _CharacterFields | None:
             project_id=entity_project,
             workflow_ids=tuple(workflow_ids),
             voice=None,
-            personality=None,
+            personality=personality,
             thumbnail_media_id=thumbnail_id,
         ),
         workflow_ids=tuple(workflow_ids),
