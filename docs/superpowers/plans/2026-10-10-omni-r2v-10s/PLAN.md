@@ -36,5 +36,14 @@ Luna owns repeatable offline tests; lead owns safety and evidence judgment.
 - [x] Apply narrow model-specific guard repair and rerun capture without bypass.
 - [x] Formalize opt-in credit-free browser-bound regression.
 - [x] Luna regression; lead quality/docs/parity review.
-- [ ] Owner bugfix-branch push and local install, preserving unrelated changes.
-- [ ] Affiliate acceptance handoff with version/schema and measured limitations.
+- [x] Owner bugfix-branch push and local install, preserving unrelated changes.
+- [x] Affiliate acceptance handoff with version/schema and measured limitations.
+
+Tool repair delivery complete: owner commit
+`239b93abc0ef39a603824ad60d934bede4062dbc`, branch `bugfix/omni-r2v-10s`,
+local preview `0.83.0a5`; public `autoflow.video` schema remains
+`bfdf7cfeb6004aa6`. Native daemon and LinkHub restarted while idle.
+
+User-side acceptance remains a separate gate: the Affiliate chat is checking the
+approved inputs and one authorized paid clip. Neither rendered quality nor its
+separate Character-update replay is declared passed here.
