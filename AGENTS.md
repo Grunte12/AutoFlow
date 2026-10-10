@@ -44,6 +44,10 @@ by construction, so Codex / Cursor / Aider / `agy` read exactly what Claude Code
 
 ## Project at a glance
 
+AutoFlow project reuse: `project bind/context/rename` have MCP twins. The shipped
+[`project-management`](skills/project-management/SKILL.md) skill guides one-brand,
+one-project reuse. Binding is opt-in per profile; explicit project arguments win.
+
 - Python CLI and MCP server for [Google Flow](https://labs.google/fx/tools/flow) — drives Veo (image-to-video, text-to-video) and Imagen (text-to-image) generations from the terminal by reverse-engineering Flow's private REST API at `aisandbox-pa.googleapis.com` — and, for accounts Google has moved to `flow.google.com`, that frontend's `batchexecute` wire (text-to-video, image-to-video from a local `--initial-frame`, reference-to-video from local `--ref` files, and text-to-image/local-file image-to-image, today; `GFLOW_CLI_FLOW_HOST`).
 - Python 3.11+ · `uv`-managed · `hatchling` builds · Playwright Chromium transport · `pyright` strict · `ruff` · `pytest`.
 - Single-package modular monolith. Top-level modules under `src/gflow_cli/`: `api/`, `auth/`, `data/`, `mcp/`, `services/`, `tools/`, `ui/`, `worker/`, `browser_manager.py`, `cli.py`, `_cli_helpers.py`, `diagnostics.py`, `json_output.py`, `media.py`, `profile_lease.py`, `redaction.py`, `storage.py`, `winsec.py`, `cli_project.py`, `cli_character.py`, `cli_credits.py`, `cli_data.py`, `cli_image.py`, `cli_instructions.py`, `cli_models.py`, `cli_movie.py`, `cli_run.py`, `cli_scene.py`, `cli_tools.py`, `cli_video.py`, `chain.py`, `chain_manifest.py`, `cli_doctor.py`, `cli_docs.py`, `docs_catalog.py`, `cli_update.py`, `composition.py`, `config.py`, `errors.py`, `file_integrity.py`, `flow_selectors/`, `update_check.py`, `exceptions.py`, `image_batch.py`, `movie_manifest.py`, `observability.py`, `paths.py`, `profile_store.py`.

@@ -6,6 +6,26 @@ This document describes the design, configuration, security model, and developer
 
 ## 1. Architecture
 
+### Reusable project context
+
+`gflow_project_bind(project, character_names=None, replace=false, profile="default")`
+reads the existing project's Characters and stores a profile-local default. It creates
+no remote assets and spends no credits. Names must identify unique, image-backed
+Characters. `gflow_project_context(profile="default")` reads that cached binding
+without browser/network activity. Its identifiers are cached, not fresh remote state.
+
+When bound, `gflow_generate_image` and `gflow_generate_video` reuse that project if
+both `project` and `project_name` are omitted. Explicit arguments win. The project ID
+is snapshotted into queued payloads before enqueue; later rebindings do not reroute
+pending jobs. Invalid binding files fail closed instead of creating a scratch project.
+With no binding the previous default behavior remains. Characters are never attached
+automatically. Binding does not merge, rename, upscale, move, or delete Flow assets.
+CLI twins: `gflow project bind` and `gflow project context`.
+
+`gflow_project_rename(project, new_title, profile="default")` mirrors CLI project
+rename through its existing native title readback and updates the catalog title.
+It creates/deletes no assets and spends no credits.
+
 The `gflow-cli` MCP server acts as a type-safe JSON-RPC interface, supporting two transport mechanisms:
 1. **stdio Subprocess Transport (`gflow mcp run`):** Runs over standard input/output (`stdio`), ideal for direct integration with local desktop agents like Claude Desktop, Cursor, or VS Code.
 2. **Streamable HTTP Transport (`gflow serve`):** Runs as a background web daemon over HTTP at `/mcp`, ideal for decoupled web UI dashboards, concurrent scripts, or external clients. The legacy HTTP+SSE transport remains available for one deprecation cycle via `gflow serve --transport sse`.

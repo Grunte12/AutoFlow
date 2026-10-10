@@ -17,6 +17,10 @@ optimization_notes: |
 
 # gflow-cli skill
 
+For repeat work with the same brand/Characters, use the shipped
+[project-management skill](../project-management/SKILL.md). Bind the existing project
+once rather than creating one per generation. Explicit project arguments still win.
+
 `gflow-cli` is a Python CLI that drives [Google Flow](https://labs.google/fx/tools/flow) — Veo (T2V/I2V) and Imagen / Nano Banana — from the terminal by automating the real Flow web UI in a headed Chrome session (Playwright), not by bypassing it. Source: <https://github.com/ffroliva/gflow-cli>. Canonical command reference: [`docs/USAGE.md`](https://github.com/ffroliva/gflow-cli/blob/main/docs/USAGE.md).
 
 ## When to invoke this skill

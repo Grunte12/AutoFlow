@@ -813,8 +813,21 @@ gflow video r2v "blend these worlds" --ref a.png --ref b.png --ref c.png --model
 
 ### Sharing one project across calls
 
-By default each `video t2v` / `i2v` / `r2v` call creates its own scratch Flow
-project. Pass `--project <id>` (same contract as `image t2i`/`i2i` — see
+Without a binding, each `video t2v` / `i2v` / `r2v` call creates its own scratch Flow
+project. Bind an existing project once to reuse it across normal image/video calls:
+
+```bash
+gflow project bind PROJECT_UUID --character-name Hero --profile PROFILE --json
+gflow project context --profile PROFILE --json
+```
+
+This reads existing Characters and saves `.gflow_project.json` inside the selected
+profile. It does not create Characters or attach them automatically. Exact names must
+be unique and image-backed. Omit `--character-name` for a project without Characters.
+Use `--replace` only to intentionally switch an existing binding. Context is an offline
+cache, not a remote inventory. Binding does not merge, move or delete any remote asset.
+
+Alternatively pass `--project <id>` (same contract as `image t2i`/`i2i` — see
 [`gflow image t2i`](#gflow-image-t2i)) to generate into an existing project
 instead, e.g. to avoid one-throwaway-project-per-clip when scripting a
 multi-clip storyboard:
@@ -830,7 +843,7 @@ gflow video t2v "close-up reaction" --project PROJ123
 was scaffolded early on but never worked and was removed. `gflow image
 batch` (manifest-driven image generation) is unaffected and still ships. For
 video, drive sequential generations through a plain shell loop instead.
-Without `--project`, each `gflow video t2v` / `i2v` / `r2v` call opens its
+Without `--project` or a binding, each `gflow video t2v` / `i2v` / `r2v` call opens its
 **own Flow project**, so the resulting videos will NOT share a `project_id`
 (unlike `gflow image batch`, which mounts one project across all prompts) —
 but they DO get generated and downloaded. Pass the same `--project <id>` to

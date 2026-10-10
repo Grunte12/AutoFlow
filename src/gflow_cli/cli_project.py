@@ -24,6 +24,7 @@ from gflow_cli.data.queries import list_projects
 from gflow_cli.data.repository import DataRepository
 from gflow_cli.data.store import DataStore
 from gflow_cli.profile_store import account_locale_for
+from gflow_cli.services.project_context import bind_project, load_binding
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -35,6 +36,71 @@ logger = structlog.get_logger(__name__)
 @click.group()
 def project() -> None:
     """Manage Google Flow projects."""
+
+
+@project.command("bind")
+@click.argument("project_id", callback=_validate_project_id)
+@click.option(
+    "--character-name", "character_names", multiple=True, help="Existing exact name to reuse."
+)
+@click.option("--replace", is_flag=True, help="Intentionally replace the current local binding.")
+@click.option("--profile", default=None, help="Profile name.")
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+def bind_subcommand(
+    project_id: str,
+    character_names: tuple[str, ...],
+    replace: bool,
+    profile: str | None,
+    as_json: bool,
+) -> None:
+    """Use one existing project for future image/video commands without --project.
+
+    Reads Flow Characters; never creates or deletes remote assets. Explicit
+    --project or --project-name on generation overrides this local default.
+    """
+    resolved = _resolve_profile(profile)
+
+    async def _act() -> None:
+        from gflow_cli.config import get_settings
+
+        binding = await bind_project(
+            _make_provider_dir(resolved),
+            project_id,
+            character_names,
+            replace=replace,
+            headless=get_settings().headless,
+        )
+        if as_json:
+            json_output.emit(
+                {"status": "ok", "profile": resolved, "binding": binding.model_dump(mode="json")}
+            )
+        else:
+            console.print(f"Project bound: {binding.project}")
+
+    run_with_handlers(_act, cli_command="project bind", as_json=as_json)
+
+
+@project.command("context")
+@click.option("--profile", default=None, help="Profile name.")
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+def context_subcommand(profile: str | None, as_json: bool) -> None:
+    """Read the saved project/Character binding without opening a browser."""
+    resolved = _resolve_profile(profile)
+
+    async def _act() -> None:
+        binding = load_binding(_make_provider_dir(resolved))
+        result = {
+            "status": "ok",
+            "profile": resolved,
+            "source": "local_binding",
+            "binding": binding.model_dump(mode="json") if binding else None,
+        }
+        if as_json:
+            json_output.emit(result)
+        else:
+            console.print(str(binding.project) if binding else "No project bound.")
+
+    run_with_handlers(_act, cli_command="project context", as_json=as_json)
 
 
 @project.command("list")
@@ -188,7 +254,7 @@ def create_subcommand(title: str | None, profile: str | None, as_json: bool) -> 
     run_with_handlers(_act, cli_command="project create", as_json=as_json)
 
 
-async def _run_rename_project(
+async def run_rename_project(
     profile_name: str,
     provider_dir: Path,
     project_id: str,
@@ -212,7 +278,7 @@ def rename_subcommand(project_id: str, new_title: str, profile: str | None, as_j
     provider_dir = _make_provider_dir(profile_name)
 
     async def _act() -> None:
-        await _run_rename_project(profile_name, provider_dir, project_id, new_title)
+        await run_rename_project(profile_name, provider_dir, project_id, new_title)
         if as_json:
             json_output.emit(
                 {

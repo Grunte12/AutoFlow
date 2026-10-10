@@ -427,7 +427,9 @@ async def _run_t2v(
     ui_mode: UiMode | None = None,
 ) -> None:
     from gflow_cli.api.video import Aspect, GenerateVideoRequest, Mode, VideoModel
+    from gflow_cli.services.project_context import resolve_project
 
+    project_id = resolve_project(profile_dir, project_id, project_name)
     effective_title = project_name or slugify_project_name(prompt, prefix="gflow-t2v")
     request = GenerateVideoRequest(
         prompt=prompt,
@@ -566,6 +568,9 @@ async def _run_i2v(
     if resolved_model is None:
         resolved_model = I2V_DEFAULT_MODEL
 
+    from gflow_cli.services.project_context import resolve_project
+
+    project_id = resolve_project(profile_dir, project_id, params.project_name)
     effective_title = params.project_name or slugify_project_name(params.prompt, prefix="gflow-i2v")
     request = GenerateVideoRequest(
         prompt=params.prompt,
@@ -628,7 +633,9 @@ async def _run_r2v(
     tool_specs: tuple[str, ...] = (),
 ) -> None:
     from gflow_cli.api.video import Aspect, GenerateVideoRequest, Mode, VideoModel
+    from gflow_cli.services.project_context import resolve_project
 
+    project_id = resolve_project(profile_dir, project_id, project_name)
     effective_title = project_name or slugify_project_name(prompt, prefix="gflow-r2v")
     request = GenerateVideoRequest(
         prompt=prompt,

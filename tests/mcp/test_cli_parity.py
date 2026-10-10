@@ -62,6 +62,9 @@ CLI_TO_MCP: dict[str, str] = {
     # download is stranded exactly as a CLI user is, so this one is NOT exempt (#865).
     "data download": "gflow_download_media",
     "project list": "gflow_list_projects",
+    "project bind": "gflow_project_bind",
+    "project context": "gflow_project_context",
+    "project rename": "gflow_project_rename",
     "instructions list": "gflow_instructions_list",
     "instructions add": "gflow_instructions_add",
     "instructions enable": "gflow_instructions_set_enabled",  # enabled=True
@@ -149,7 +152,6 @@ _MCP_EXEMPT: dict[str, str] = {
     "movie run": "movie pipeline — not yet ported (skills-audit Task 7 backlog)",
     "movie template": "movie pipeline — not yet ported (skills-audit Task 7 backlog)",
     "project create": "project management — not yet ported",
-    "project rename": "project management — not yet ported",
     "project show": "project management — not yet ported",
     "scene create": "scene tooling — not yet ported",
     "scene show": "scene tooling — not yet ported",

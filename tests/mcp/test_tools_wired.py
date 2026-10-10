@@ -703,7 +703,10 @@ class TestRunGenerationTask:
             ),
             patch(
                 "gflow_cli.mcp.tools.get_settings",
-                return_value=MagicMock(resolved_db_path=lambda: temp_db.path),
+                return_value=MagicMock(
+                    resolved_db_path=lambda: temp_db.path,
+                    profile_subdir=lambda _: tmp_path / "profile_default",
+                ),
             ),
         ):
             result = await _run_generation_task(

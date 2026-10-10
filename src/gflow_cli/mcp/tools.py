@@ -55,6 +55,7 @@ from gflow_cli.profile_store import (
 from gflow_cli.services.credits import inspect_all_profiles as inspect_all_credit_profiles
 from gflow_cli.services.credits import inspect_profile as inspect_credit_profile
 from gflow_cli.services.media_recovery import download_media
+from gflow_cli.services.project_context import bind_project, load_binding, resolve_project
 from gflow_cli.worker import codec
 from gflow_cli.worker.daemon import FlowWorker
 from gflow_cli.worker.queue import QueueRepository
@@ -334,6 +335,15 @@ async def _run_generation_task(
     wait: bool = True,
 ) -> dict[str, Any]:
     """Enqueue a generation task and either return handle immediately or wait for completion."""
+    # Resolve once, before either queue path. A later rebind cannot reroute this task.
+    payload = dict(payload)
+    selected_project = resolve_project(
+        get_settings().profile_subdir(profile),
+        payload.get("project_id"),
+        payload.get("project_name"),
+    )
+    if selected_project is not None:
+        payload["project_id"] = selected_project
     if not wait:
         return _enqueue_generation_task(
             profile=profile,
@@ -1323,6 +1333,82 @@ def _character_to_dict(char: Any) -> dict[str, Any]:
 
 
 @server.tool(
+    name="gflow_project_bind",
+    description="Reuse one existing Flow project for future image/video calls that omit project. "
+    "Reads existing Characters once and stores selected names/IDs locally. No creation/deletion "
+    "or generation. Explicit project/project_name overrides the binding; replace switches it.",
+)
+@_guarded
+async def gflow_project_bind(
+    project: str,
+    character_names: list[str] | None = None,
+    replace: bool = False,
+    profile: str = _DEFAULT_PROFILE,
+) -> dict[str, Any]:
+    """Bind an existing project and optionally cache exact Character names for this profile."""
+    resolved = _resolve_and_validate_profile(profile)
+    if isinstance(resolved, dict):
+        return resolved
+    settings = get_settings()
+    async with _profile_lock(resolved):
+        binding = await bind_project(
+            settings.profile_subdir(resolved),
+            project,
+            tuple(character_names or ()),
+            replace=replace,
+            headless=settings.headless,
+        )
+    return {"status": "ok", "profile": resolved, "binding": binding.model_dump(mode="json")}
+
+
+@server.tool(
+    name="gflow_project_context",
+    description="Read the locally bound Flow project and cached Character names/IDs. "
+    "No browser, network, creation or credits. Null binding means no default selected. "
+    "Characters are not attached automatically; choose the ones needed for the scene.",
+)
+@_guarded
+async def gflow_project_context(profile: str = _DEFAULT_PROFILE) -> dict[str, Any]:
+    """Read cached project routing state, not a fresh remote inventory."""
+    resolved = _resolve_and_validate_profile(profile)
+    if isinstance(resolved, dict):
+        return resolved
+    binding = load_binding(get_settings().profile_subdir(resolved))
+    return {
+        "status": "ok",
+        "profile": resolved,
+        "source": "local_binding",
+        "binding": binding.model_dump(mode="json") if binding else None,
+    }
+
+
+@server.tool(
+    name="gflow_project_rename",
+    description="Rename an existing Flow project and synchronize its local catalog title. "
+    "No project creation, deletion, generation or credits. Supply its exact project UUID.",
+)
+@_guarded
+async def gflow_project_rename(
+    project: str,
+    new_title: str,
+    profile: str = _DEFAULT_PROFILE,
+) -> dict[str, Any]:
+    """Mirror CLI project rename using the same native rename/readback path."""
+    from gflow_cli.cli_project import run_rename_project
+
+    if not _FLOW_ID_RE.fullmatch(project) or not new_title.strip():
+        return _bad_param("Invalid project rename", "Use a project UUID and a nonempty title.")
+    resolved = _resolve_and_validate_profile(profile)
+    if isinstance(resolved, dict):
+        return resolved
+    async with _profile_lock(resolved):
+        await run_rename_project(
+            resolved, get_settings().profile_subdir(resolved), project, new_title
+        )
+    return {"status": "ok", "profile": resolved, "project_id": project, "title": new_title}
+
+
+@server.tool(
     name="gflow_character_list",
     description=(
         "List the saved Flow CHARACTER entities in a project, with their entity ids. "
@@ -2162,6 +2248,9 @@ async def gflow_instructions_apply(
 
 # Re-export Path so tests that import it directly still work
 __all__ = [
+    "gflow_project_rename",
+    "gflow_project_bind",
+    "gflow_project_context",
     "gflow_generate_image",
     "gflow_generate_video",
     "gflow_list_tools",

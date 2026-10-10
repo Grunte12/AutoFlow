@@ -1306,6 +1306,9 @@ async def _run_t2i(
     as_json: bool = False,
     tool_specs: tuple[str, ...] = (),
 ) -> None:
+    from gflow_cli.services.project_context import resolve_project
+
+    project_id = resolve_project(profile_dir, project_id, project_name)
     settings = get_settings()
     recorder = OperationRecorder.open(settings)
     try:
@@ -1786,6 +1789,9 @@ async def _run_i2i(
     as_json: bool = False,
     tool_specs: tuple[str, ...] = (),
 ) -> None:
+    from gflow_cli.services.project_context import resolve_project
+
+    project_id = resolve_project(profile_dir, project_id, project_name)
     settings = get_settings()
     recorder = OperationRecorder.open(settings)
     req: GenerateImageRequest | None = None

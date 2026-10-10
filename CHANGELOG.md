@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- AutoFlow project reuse: CLI `project bind/context` and MCP `gflow_project_bind`
+  / `gflow_project_context` persist one existing project and selected Character IDs
+  per profile. Normal image/video calls reuse it when no explicit ID/title is given;
+  queued jobs snapshot the selected project. Corrupted state fails closed. Binding
+  performs no remote creation, cleanup, merging or automatic Character attachment.
+  A shipped `project-management` skill documents safe reuse and cleanup boundaries.
+
 - `gflow character import` and `gflow_character_import` import an original image
   sheet through Flow's native Character form without invoking image generation.
   A caller-supplied operation UUID is journaled before mutation; success requires
