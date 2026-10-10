@@ -60,8 +60,14 @@ raw response bodies are deliberately not published here.
 - [x] Regression RED before parser repair.
 - [x] Regression GREEN and CLI/native MCP live reads for both Characters.
 - [x] Hygiene, links, website privacy/mirror, repository memory, Ruff and strict types.
-- [ ] Public HTTP LinkHub read after scoped local installation.
-- [ ] Owner push and scoped local installation.
+- [x] Public HTTP LinkHub read after scoped local installation, for both Characters:
+  returned personality text exactly equals the expected native text, and approved
+  workflow IDs are unchanged. The public schema version is unchanged.
+- [x] Owner push of implementation commit `310c2f03` to `bugfix/omni-r2v-10s`.
+- [x] Scoped editable installation: source and package metadata both report
+  `0.83.0a6`; 46 installed-runtime parser/CLI tests passed. Existing unrelated
+  runtime edits were retained. Idle local AutoFlow/LinkHub services were restarted
+  before public HTTP acceptance.
 - [ ] Rendered Character identity acceptance: unresolved; no additional generation.
 
 No video generation, upload, Character/project mutation, deletion or generation
