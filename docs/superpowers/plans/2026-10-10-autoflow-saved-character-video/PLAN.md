@@ -25,7 +25,7 @@ have tests; never pick the first project record or infer absence from a timeout.
 4. [x] Run offline tests, types/lint, and zero-credit browser regression.
 5. [x] Install candidate without overwriting unrelated runtime changes.
 6. [x] Run the one authorized paid MCP generation, download, then QC at 0.2 s intervals.
-7. [ ] Run repository delivery checks; push only verified changes and record installed version.
+7. [x] Run repository delivery checks; push only verified changes and record installed version.
 
 Do not call the generation path complete based on tests or picker chips alone.
 
@@ -41,3 +41,7 @@ A follow-up focused run passed 11 binding/observer tests. Installed CLI and the
 restarted owned HTTP MCP both report 0.83.0a2. The installed-source background
 probe verified entity chips, wire slots and exact prompt while aborting submission
 before billing. See [live verification](../../../LIVE_VERIFICATION_v0.83.0a2.md).
+
+Implementation commit `08efa6946c53252abaf70f9ba69fd24cbd7fe808` was pushed
+to the owner's AutoFlow `feature/autoflow-character-import` branch. No upstream
+PR, main-branch merge, release tag or public registry publish was performed.
