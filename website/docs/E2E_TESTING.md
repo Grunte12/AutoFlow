@@ -227,6 +227,34 @@ See [DEVELOPMENT.md § E2e gate](DEVELOPMENT.md#e2e-gate-before-merging-develop-
 
 ---
 
+## Character picker parity
+
+This opt-in browser test mentions only existing project assets. It blocks video
+generation, uploads and Character mutation before dispatch. It compares native
+picker clicks with AutoFlow's production composer: complete ordered rich prompt,
+media/Character IDs and names, text, model, count and project. Selected settings
+are also read back from the UI; unknown wire aspect/resolution enums are not guessed.
+It also compares the full generation specification. A repeated native capture
+establishes variance in two unmapped UUID slots; every other slot must match.
+The UUID differences are retained in the report, never silently stripped.
+Client equality does not prove server image consumption or rendered likeness.
+
+Prepare a private JSON file with `project_id`, `prompt`, `media` (each has `id` and
+`picker_name`), and `characters` (each has `id` and `name`). Optional settings:
+`model: "omni_flash"`, `duration: 10`, `aspect: "9:16"`, `resolution: "720p"`,
+`count: 1`. Use an existing authenticated profile and an empty draft; no assets
+are created by this test. Do not commit the private input or raw captures.
+
+```bash
+GFLOW_CLI_E2E_PROFILE=<profile> \
+GFLOW_CLI_E2E_RUN_CHARACTER_PICKER_PARITY=1 \
+GFLOW_CLI_E2E_CHARACTER_PICKER_PARITY_INPUT=/absolute/private/input.json \
+uv run pytest -m e2e_auth tests/e2e/test_character_picker_parity_bdd.py -q
+```
+
+For an explicit managed profile home, also set `GFLOW_CLI_E2E_HOME`. The test
+refuses nonempty drafts and never automatically retries a generation.
+
 ## Nightly canary (#502)
 
 Between releases the live tiers are invisible, so Flow-side drift (cohort flaps,

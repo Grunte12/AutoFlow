@@ -4,10 +4,12 @@
 
 ## AutoFlow owner source preview
 
-0.83.0a6 is an owner-repository preview, not a signed or published release.
-Native Character personality readback is repaired. A paid Omni R2V job completed
+0.83.0a7 is an owner-repository preview, not a signed or published release.
+Native Character personality readback and current detail/Add selection are repaired.
+A guarded native/production comparison proves client binding, not image consumption.
+A paid Omni R2V job completed
 but failed Character identity QC; image consumption and likeness remain unresolved.
-See [evidence and limitations](LIVE_VERIFICATION_v0.83.0a6.md).
+See [evidence and limitations](LIVE_VERIFICATION_v0.83.0a7.md).
 
 ## Current release
 

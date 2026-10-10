@@ -736,6 +736,50 @@ class FakePage:
         raise AssertionError(f"composer used an unmodelled selector: {css!r}")
 
 
+@pytest.mark.asyncio
+async def test_mention_by_name_places_caret_in_last_paragraph_and_settles_before_at(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = FakePage()
+    events: list[tuple[str, Any]] = []
+
+    async def evaluate(expression: str, _argument: Any = None) -> None:
+        events.append(("evaluate", expression))
+
+    async def wait_for_timeout(milliseconds: float) -> None:
+        events.append(("wait", milliseconds))
+
+    class RecordingKeyboard:
+        async def type(self, text: str, **options: Any) -> None:
+            events.append(("type", (text, options)))
+
+        async def press(self, key: str) -> None:
+            events.append(("press", key))
+
+    class EmptyOptions:
+        async def all_text_contents(self) -> list[str]:
+            return []
+
+    page.evaluate = evaluate  # type: ignore[method-assign]
+    page.wait_for_timeout = wait_for_timeout  # type: ignore[attr-defined]
+    page.keyboard = RecordingKeyboard()  # type: ignore[assignment]
+    page.locator = lambda _selector: EmptyOptions()  # type: ignore[method-assign]
+    reads = iter([[], [{"reference_type": "entity", "entity_id": "entity-id"}]])
+
+    async def read_chips(_self: Any, _page: FakePage) -> list[dict[str, str]]:
+        return next(reads)
+
+    monkeypatch.setattr(migrated_composer.MigratedComposer, "read_chips", read_chips)
+    await migrated_composer.MigratedComposer()._mention_by_name(page, "Goofy", expect_chips=1)
+
+    caret_index = next(i for i, event in enumerate(events) if event[0] == "evaluate")
+    caret_script = events[caret_index][1]
+    assert "e.lastElementChild||e" in caret_script
+    assert "selectNodeContents(p)" in caret_script
+    assert events[caret_index + 1] == ("wait", 200)
+    assert events[caret_index + 2] == ("type", ("@", {"delay": 120}))
+
+
 class _ButtonLocator(FakeLocator):
     def __init__(self, page: FakePage) -> None:
         super().__init__(page, "button", [])

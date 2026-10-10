@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Saved Character selection now follows the native row -> selected detail -> Add
+  confirmation, instead of Enter alone. Appending uses the editor's last paragraph;
+  existing image references survive. Missing/ambiguous selections refuse before
+  submit, and ordered entity UUIDs are checked. A guarded native/production picker
+  probe compares client inputs without generating or uploading. This does not
+  establish server-side image consumption or rendered likeness.
+
 - Native Character list/show now read the stored personality field instead of
   reporting a false null through CLI and MCP. Missing/null values remain null;
   malformed non-text values fail safely. This readback repair does not establish

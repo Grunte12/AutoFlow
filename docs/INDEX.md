@@ -2,6 +2,8 @@
 
 Existing Character portrait/full-body replacement: [USAGE](USAGE.md#gflow-character-update-images)
 and [MCP](MCP.md). Use exact IDs and a stable operation UUID; no generation or new Character.
+See the [0.83.0a7 source-preview verification](LIVE_VERIFICATION_v0.83.0a7.md)
+for native Character picker confirmation and guarded input parity.
 See the [0.83.0a6 source-preview verification](LIVE_VERIFICATION_v0.83.0a6.md)
 for personality readback and the unresolved rendered-identity failure,
 the [0.83.0a5 verification](LIVE_VERIFICATION_v0.83.0a5.md) for Omni R2V input binding, and the

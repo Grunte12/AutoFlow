@@ -2298,9 +2298,9 @@ class MigratedComposer:
     ) -> None:
         """Mention each character by name, then prove the chip is that ENTITY (#723).
 
-        The gesture is the same one references use — ``@``, the name, **Enter** — because
-        the migrated composer has one picker for everything. What differs is the
-        verification, and it is not optional:
+        Characters use the native exact-name row, then its detail-panel Add button.
+        Images commit directly; Enter alone does not commit a Character on the
+        currently served picker. The verification is not optional:
 
         **Flow lists characters and media in that one picker and does not rank them.**
         Measured 2026-09-07: the same ``@Kael`` query committed
@@ -2319,7 +2319,15 @@ class MigratedComposer:
         # them would silently drop references the caller asked for.
         base = len(await self.read_chips(page))
         for i, name in enumerate(names):
-            await self._mention_by_name(page, name, expect_chips=base + i + 1)
+            try:
+                await self._mention_by_name(page, name, expect_chips=base + i + 1, character=True)
+            except PlaywrightTimeoutError as exc:
+                raise ReferenceNotFoundError(
+                    detail=(
+                        f"migrated host: Character picker confirmation did not finish for "
+                        f"{name!r}; the current draft was not submitted"
+                    )
+                ) from exc
 
         chips = (await self.read_chips(page))[base:]
         not_entities = [c for c in chips if c.get("reference_type") != "entity"]
@@ -2334,13 +2342,13 @@ class MigratedComposer:
                     f"reference"
                 ),
             )
-        attached = {c.get("entity_id", "") for c in chips}
-        missing = [e for e in entity_ids if e not in attached]
-        if missing:
+        attached = tuple(c.get("entity_id", "") for c in chips)
+        if attached != entity_ids:
             raise ReferenceNotFoundError(
                 detail=(
-                    f"migrated host: the prompt carries entity chips {sorted(attached)} but "
-                    f"{missing} was requested — a chip of the right kind is not proof it is "
+                    f"migrated host: the prompt carries entity chips {list(attached)} but "
+                    f"{list(entity_ids)} was requested in order — a chip of the right kind is "
+                    "not proof it is "
                     f"the right character. Refusing to submit"
                 ),
             )
@@ -2369,7 +2377,21 @@ class MigratedComposer:
             MENTION_CHIP,
         )
 
-    async def _mention_by_name(self, page: Page, name: str, *, expect_chips: int) -> None:
+    @staticmethod
+    async def _focus_prompt_end(page: Page) -> None:
+        """Focus inside the final paragraph without clicking an existing chip."""
+        await page.evaluate(
+            "sel => { const e=document.querySelector(sel); e.focus(); "
+            "const p=e.lastElementChild||e; "
+            "const r=document.createRange(); r.selectNodeContents(p); r.collapse(false); "
+            "const s=getSelection(); s.removeAllRanges(); s.addRange(r); }",
+            COMPOSER,
+        )
+        await page.wait_for_timeout(200)  # let the editor observe the paragraph caret
+
+    async def _mention_by_name(
+        self, page: Page, name: str, *, expect_chips: int, character: bool = False
+    ) -> None:
         """Insert one mention chip for *name*, and verify it landed.
 
         Retries like :meth:`_pick_frame_by_name` does, and for the same measured reason:
@@ -2383,13 +2405,7 @@ class MigratedComposer:
         chips = await self.read_chips(page)
         for attempt in range(1, FRAME_SEARCH_ATTEMPTS + 1):
             before = len(chips)
-            # Append explicitly so clicking cannot move the caret into a prior chip.
-            await page.evaluate(
-                "sel => { const e=document.querySelector(sel); e.focus(); "
-                "const r=document.createRange(); r.selectNodeContents(e); r.collapse(false); "
-                "const s=getSelection(); s.removeAllRanges(); s.addRange(r); }",
-                COMPOSER,
-            )
+            await self._focus_prompt_end(page)
             # `keyboard.type`, never `insert_text`: the latter dispatches input events with
             # no key events, so the mention plugin opens a picker with no query behind it
             # and every later gesture is a no-op. `send_prompt` keeps insert_text on
@@ -2403,6 +2419,49 @@ class MigratedComposer:
                 t.strip()
                 for t in await page.locator(f"{PICKER_OPTION}:visible").all_text_contents()
             ]
+            if character:
+                # Names are asset data, not translated UI labels. Never accept the
+                # picker's first ranked result: a media asset may share this name.
+                option = page.locator(f"{PICKER_OPTION}:visible").filter(
+                    has=page.get_by_text(name, exact=True)
+                )
+                if await option.count() != 1:
+                    raise ReferenceNotFoundError(
+                        detail=f"migrated host: Character {name!r} is missing or ambiguous"
+                    )
+                await option.click(timeout=5000)
+                add_selector = f"{PICKER} button.detail-add-to-prompt-btn"
+                add = page.locator(f"{add_selector}:visible").first
+                await add.wait_for(state="visible", timeout=5000)
+                # A preceding Character's detail can linger while the new row loads.
+                # Exclude search-option names; only the selected detail may confirm it.
+                await page.wait_for_function(
+                    """({sel,name}) => {
+                      const b=[...document.querySelectorAll(sel)]
+                        .find(e=>e.getClientRects().length);
+                      if(!b) return false;
+                      const p=b.closest('flow-add-menu-popover-content');
+                      return [...p.querySelectorAll('*')].some(e=>
+                        !e.children.length && !e.closest('button.asset-item') &&
+                        (e.textContent||'').trim()===name) ||
+                        [...p.querySelectorAll('input')].some(e=>e.value===name);
+                    }""",
+                    arg={"sel": add_selector, "name": name},
+                    timeout=10000,
+                )
+                await add.click(timeout=5000)
+                await page.wait_for_function(
+                    """({sel,n}) => {
+                      const chips=[...document.querySelectorAll(sel)];
+                      const c=chips.at(-1);
+                      return chips.length===n && c?.getAttribute('data-entity-id');
+                    }""",
+                    arg={"sel": MENTION_CHIP, "n": expect_chips},
+                    timeout=10000,
+                )
+                await self._focus_prompt_end(page)
+                await page.keyboard.type(" ", delay=80)
+                return
             # Enter outside a visible picker could submit a paid generation.
             if offered:
                 await page.keyboard.press("Enter")
@@ -2592,14 +2651,16 @@ class MigratedComposer:
 
     async def send_prompt(self, page: Page, prompt: str, *, append: bool = False) -> None:
         """Type the prompt. ``append=True`` keeps what is already in the composer — the
-        mention chips an r2v run just attached — and leaves the caret where the last one
-        put it, rather than clicking and moving it."""
+        mention chips an r2v run just attached — and restores the final paragraph caret
+        after picker focus changes, without clicking a chip."""
         composer = page.locator(COMPOSER).first
         if not await composer.count():
             raise UiSelectorDriftError(
                 detail=f"migrated host: composer ({COMPOSER}) not found (host=migrated)",
             )
-        if not append:
+        if append:
+            await self._focus_prompt_end(page)
+        else:
             # _close_pane's docstring names THIS click as the one that surfaced a
             # stuck settings pane as a bare 5 s TimeoutError naming only the composer.
             await self._click(page, composer, named=COMPOSER, timeout=5000)

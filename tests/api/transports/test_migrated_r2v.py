@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from gflow_cli.api.transports.migrated_composer import FRAME_SEARCH_ATTEMPTS
 from gflow_cli.api.video import Aspect, GenerateVideoRequest, Mode
@@ -145,6 +146,13 @@ class FakeLoc:
     def filter(self, *, has: Any = None, has_text: Any = None) -> FakeLoc:
         if has_text == "Upload media":
             return FakeLoc(self.page, "upload", ["upload"] if self.page.upload_button else [])
+        if self.kind == "character_option" and has is not None:
+            exact = has.items[0] if has.kind == "exact_text" and has.items else None
+            return FakeLoc(
+                self.page,
+                self.kind,
+                [item for item in self.items if item == exact],
+            )
         return self
 
     async def count(self) -> int:
@@ -153,11 +161,20 @@ class FakeLoc:
     async def all_text_contents(self) -> list[str]:
         return [str(i) for i in self.items]
 
+    async def wait_for(self, *, state: str = "visible", timeout: float = 0) -> None:
+        del timeout
+        if state == "visible" and not self.items:
+            raise PlaywrightTimeoutError(f"{self.kind} did not become visible")
+
     async def click(self, **_: Any) -> None:
         if self.kind == "upload":
             self.page.upload_clicked += 1
         if self.kind == "composer":
             self.page.composer_clicks += 1
+        if self.kind == "character_option":
+            self.page.select_character(str(self.items[0]))
+        if self.kind == "character_add":
+            self.page.add_character()
 
 
 class FakeKeyboard:
@@ -325,45 +342,116 @@ async def test_clear_composer_selects_editor_dom_instead_of_platform_select_all(
 
 
 async def test_the_prompt_is_appended_so_the_mentions_survive() -> None:
-    """Clicking the composer would move the caret away from the last mention; an r2v run
-    must add its text after the chips, not on top of them."""
+    """Append must restore the caret itself; native Add is not trusted to leave focus."""
     from gflow_cli.api.transports.migrated_composer import MigratedComposer
 
     page = FakeComposerPage()
+    events: list[tuple[str, Any]] = []
+    original_evaluate = page.evaluate
+    original_insert_text = page.keyboard.insert_text
+
+    async def record_evaluate(script: str, arg: Any = None) -> Any:
+        events.append(("evaluate", script))
+        return await original_evaluate(script, arg)
+
+    async def record_insert_text(text: str) -> None:
+        events.append(("insert_text", text))
+        await original_insert_text(text)
+
+    page.evaluate = record_evaluate  # type: ignore[method-assign]
+    page.keyboard.insert_text = record_insert_text  # type: ignore[method-assign]
     await MigratedComposer().send_prompt(page, "a woman holding it", append=True)
+
     assert page.composer_clicks == 0
     assert "a woman holding it" in page.typed
+    caret_index = next(i for i, event in enumerate(events) if event[0] == "evaluate")
+    caret_script = events[caret_index][1]
+    assert "e.focus()" in caret_script
+    assert "e.lastElementChild||e" in caret_script
+    assert "selectNodeContents(p)" in caret_script
+    assert "collapse(false)" in caret_script
+    assert next(i for i, event in enumerate(events) if event[0] == "insert_text") > caret_index
 
 
 # --- character entities (#723) ----------------------------------------------
 
 
-class FakeEntityPage(FakeComposerPage):
-    """A composer whose picker commits CHARACTER ENTITIES rather than media.
+class FakeCharacterDetailPage(FakeComposerPage):
+    """Native Character row selection and its separate detail/Add confirmation."""
 
-    Modelled on the 2026-09-07 capture: `@` + the character's name + Enter inserts
-    ``<span class="mention-chip" data-reference-type="entity" data-entity-id="...">``,
-    and the aborted ``MZZa6b`` submit carried that id in its own reference slot.
-    """
+    def __init__(
+        self,
+        *,
+        entities: dict[str, str],
+        duplicate_names: tuple[str, ...] = (),
+        detail_name_on_select: str | None = None,
+        add_succeeds: bool = True,
+        add_reference_type: str = "entity",
+    ) -> None:
+        assets = [name for name in entities]
+        assets.extend(duplicate_names)
+        super().__init__(assets=assets)
+        self.entities = entities
+        self.detail_name_on_select = detail_name_on_select
+        self.add_succeeds = add_succeeds
+        self.add_reference_type = add_reference_type
+        self.selected_name: str | None = None
+        self.detail_name: str | None = None
+        self.add_clicks = 0
 
-    def __init__(self, *, entities: dict[str, str], **kw: Any) -> None:
-        super().__init__(assets=[f"{n}Character" for n in entities], **kw)
-        self._entities = entities
-        self._order = list(entities)
+    def locator(self, css: str) -> FakeLoc:
+        if css == "button.asset-item[role='option']:visible":
+            return FakeLoc(self, "character_option", list(self.assets))
+        if css.endswith("button.detail-add-to-prompt-btn:visible"):
+            return FakeLoc(self, "character_add", ["Add"] if self.selected_name else [])
+        return super().locator(css)
 
-    def on_enter(self) -> None:
-        self.enters += 1
-        if self.enters <= self.miss_first:
-            return
-        for _ in range(self.chips_per_enter):
-            name = self._order[len(self.chips) % len(self._order)]
+    def get_by_text(self, text: str, *, exact: bool = False) -> FakeLoc:
+        assert exact
+        return FakeLoc(self, "exact_text", [text])
+
+    def select_character(self, name: str) -> None:
+        self.selected_name = name
+        self.detail_name = self.detail_name_on_select or name
+
+    def add_character(self) -> None:
+        self.add_clicks += 1
+        if self.add_succeeds and self.selected_name in self.entities:
             self.chips.append(
                 {
-                    "text": name,
-                    "entity_id": self._entities[name],
-                    "reference_type": "entity",
+                    "text": self.selected_name,
+                    "entity_id": (
+                        self.entities[self.selected_name]
+                        if self.add_reference_type == "entity"
+                        else ""
+                    ),
+                    "reference_type": self.add_reference_type,
                 }
             )
+
+    async def wait_for_function(
+        self, _expression: str, *, arg: dict[str, Any], timeout: int
+    ) -> None:
+        del timeout
+        if "name" in arg:
+            if self.detail_name == arg["name"]:
+                return
+            raise PlaywrightTimeoutError("selected Character detail name did not match")
+        if (
+            "n" in arg
+            and len(self.chips) == arg["n"]
+            and self.chips
+            and self.chips[-1].get("entity_id")
+        ):
+            return
+        raise PlaywrightTimeoutError("Character Add did not bind an entity id")
+
+
+class FakeEntityPage(FakeCharacterDetailPage):
+    """A native picker that opens the exact Character detail row before Add."""
+
+    def __init__(self, *, entities: dict[str, str], **kw: Any) -> None:
+        super().__init__(entities=entities, **kw)
 
 
 async def test_character_mentions_land_as_entity_chips() -> None:
@@ -378,6 +466,90 @@ async def test_character_mentions_land_as_entity_chips() -> None:
     assert {c["reference_type"] for c in page.chips} == {"entity"}
 
 
+async def test_reversed_entity_ids_are_refused_instead_of_set_matched() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakeEntityPage(entities={"Kael": "ent-kael", "Naia": "ent-naia"})
+    with pytest.raises(ReferenceNotFoundError, match="requested in order"):
+        await MigratedComposer().attach_character_entities(
+            page,
+            entity_ids=("ent-kael", "ent-naia"),
+            names=("Naia", "Kael"),
+        )
+
+    assert [chip["entity_id"] for chip in page.chips] == ["ent-naia", "ent-kael"]
+
+
+async def test_character_uses_detail_add_and_preserves_existing_media() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakeCharacterDetailPage(entities={"Kael": "ent-kael"})
+    existing_media = {"text": "cafe.jpg", "entity_id": "", "reference_type": "media"}
+    page.chips.append(existing_media)
+
+    await MigratedComposer().attach_character_entities(
+        page,
+        entity_ids=("ent-kael",),
+        names=("Kael",),
+        clear=False,
+    )
+
+    assert page.add_clicks == 1
+    assert page.typed.count("<Enter>") == 0
+    assert page.chips == [
+        existing_media,
+        {"text": "Kael", "entity_id": "ent-kael", "reference_type": "entity"},
+    ]
+
+
+async def test_duplicate_exact_character_names_refuse_before_add() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakeCharacterDetailPage(entities={"Kael": "ent-kael"}, duplicate_names=("Kael",))
+    with pytest.raises(ReferenceNotFoundError, match="missing or ambiguous"):
+        await MigratedComposer().attach_character_entities(
+            page, entity_ids=("ent-kael",), names=("Kael",)
+        )
+
+    assert page.add_clicks == 0
+    assert page.typed.count("<Enter>") == 0
+
+
+async def test_stale_character_detail_name_does_not_reach_add() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakeCharacterDetailPage(entities={"Memo": "ent-memo"}, detail_name_on_select="Goofy")
+    with pytest.raises(
+        ReferenceNotFoundError, match="Character picker confirmation did not finish"
+    ) as exc_info:
+        await MigratedComposer().attach_character_entities(
+            page, entity_ids=("ent-memo",), names=("Memo",)
+        )
+
+    assert isinstance(exc_info.value.__cause__, PlaywrightTimeoutError)
+    assert page.add_clicks == 0
+    assert page.chips == []
+
+
+async def test_character_add_without_entity_chip_refuses() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakeCharacterDetailPage(entities={"Kael": "ent-kael"}, add_succeeds=False)
+    existing_media = {"text": "cafe.jpg", "entity_id": "", "reference_type": "media"}
+    page.chips.append(existing_media)
+    with pytest.raises(
+        ReferenceNotFoundError, match="Character picker confirmation did not finish"
+    ) as exc_info:
+        await MigratedComposer().attach_character_entities(
+            page, entity_ids=("ent-kael",), names=("Kael",)
+        )
+
+    assert isinstance(exc_info.value.__cause__, PlaywrightTimeoutError)
+    assert page.add_clicks == 1
+    assert page.typed.count("<Enter>") == 0
+    assert page.chips == [existing_media]
+
+
 async def test_a_media_chip_where_a_character_was_asked_for_is_refused() -> None:
     """Flow's picker lists characters and media TOGETHER and does not rank them.
 
@@ -389,11 +561,18 @@ async def test_a_media_chip_where_a_character_was_asked_for_is_refused() -> None
     """
     from gflow_cli.api.transports.migrated_composer import MigratedComposer
 
-    page = FakeComposerPage(assets=["kael_ref.jpgImage"])  # commits MEDIA chips
-    with pytest.raises(ReferenceNotFoundError, match="media"):
+    page = FakeCharacterDetailPage(entities={"Kael": "ent-kael"}, add_reference_type="media")
+    with pytest.raises(
+        ReferenceNotFoundError, match="Character picker confirmation did not finish"
+    ) as exc_info:
         await MigratedComposer().attach_character_entities(
             page, entity_ids=("ent-kael",), names=("Kael",)
         )
+    assert isinstance(exc_info.value.__cause__, PlaywrightTimeoutError)
+    assert page.add_clicks == 1
+    assert page.chips[0]["reference_type"] == "media"
+    assert page.chips[0]["entity_id"] == ""
+    assert page.typed.count("<Enter>") == 0
 
 
 async def test_the_wrong_entity_is_refused_even_though_a_chip_landed() -> None:
