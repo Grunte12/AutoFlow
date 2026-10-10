@@ -1,5 +1,9 @@
 # Documentation Index
 
+Existing Character portrait/full-body replacement: [USAGE](USAGE.md#gflow-character-update-images)
+and [MCP](MCP.md). Use exact IDs and a stable operation UUID; no generation or new Character.
+See the [0.83.0a4 source-preview verification](LIVE_VERIFICATION_v0.83.0a4.md).
+
 Welcome to the `gflow-cli` documentation. This index is the routing layer: it tells you where each topic lives. Keep `README.md` slim (high-level overview + install) and document deep details here.
 
 | Doc | Purpose | Read when… |

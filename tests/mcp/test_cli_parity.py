@@ -43,6 +43,7 @@ from gflow_cli.mcp import tools as mcp_tools
 # parameter selects the behaviour (e.g. gflow_generate_video's ``mode``).
 CLI_TO_MCP: dict[str, str] = {
     "character import": "gflow_character_import",
+    "character update-images": "gflow_character_update_images",
     "character list": "gflow_character_list",
     "character voices": "gflow_character_voices",
     "character show": "gflow_character_show",

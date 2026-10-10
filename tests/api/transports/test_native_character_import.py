@@ -7,7 +7,9 @@ import hashlib
 import json
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -15,7 +17,7 @@ from gflow_cli.api.character import Character
 from gflow_cli.api.transports import migrated_composer
 from gflow_cli.api.transports import native_character_import as importer
 from gflow_cli.api.transports.native_character import NativeCharacterReadback
-from gflow_cli.errors import ConfigurationError, WireFormatError
+from gflow_cli.errors import ConfigurationError, UiSelectorDriftError, WireFormatError
 
 PROJECT = "a0000000-0000-4000-8000-000000000001"
 ENTITY = "b0000000-0000-4000-8000-000000000001"
@@ -731,3 +733,57 @@ async def test_metadata_ack_must_match_before_done_and_uses_short_offline_wait(
 
     assert not page.done_clicked
     assert page.handlers == []
+
+
+@pytest.mark.asyncio
+async def test_unique_waits_for_late_native_control_hydration() -> None:
+    hydrated = False
+    locator = SimpleNamespace(
+        wait_for=AsyncMock(),
+        count=AsyncMock(),
+        click=AsyncMock(),
+    )
+
+    async def hydrate(**kwargs: Any) -> None:
+        nonlocal hydrated
+        assert kwargs == {"timeout": 5_000}
+        hydrated = True
+
+    async def count() -> int:
+        return 1 if hydrated else 0
+
+    locator.wait_for.side_effect = hydrate
+    locator.count.side_effect = count
+    page = SimpleNamespace(locator=Mock(return_value=locator))
+
+    actual = await importer._unique(page, "native-control", "upload")  # type: ignore[arg-type]
+
+    assert actual is locator
+    locator.wait_for.assert_awaited_once_with(timeout=5_000)
+    locator.count.assert_awaited_once()
+    locator.click.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["timeout", "duplicate"])
+async def test_unique_timeout_or_duplicate_is_selector_drift_before_click(
+    failure: str,
+) -> None:
+    locator = SimpleNamespace(
+        wait_for=AsyncMock(),
+        count=AsyncMock(return_value=2 if failure == "duplicate" else 1),
+        click=AsyncMock(),
+    )
+    if failure == "timeout":
+        locator.wait_for.side_effect = importer.PlaywrightTimeoutError("control did not hydrate")
+    page = SimpleNamespace(locator=Mock(return_value=locator))
+
+    with pytest.raises(UiSelectorDriftError, match="native Character upload control"):
+        await importer._unique(page, "native-control", "upload")  # type: ignore[arg-type]
+
+    locator.wait_for.assert_awaited_once_with(timeout=5_000)
+    locator.click.assert_not_awaited()
+    if failure == "timeout":
+        locator.count.assert_not_awaited()
+    else:
+        locator.count.assert_awaited_once()

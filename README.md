@@ -36,7 +36,7 @@
 You have a Google account with Flow access, you have Veo credits, and you run real batch work. gflow-cli gives you:
 
 - **Batch generation.** Loop prompts straight from the shell: `for p in $(cat prompts.txt); do gflow image t2i "$p"; done`. Image batching plus `gflow video t2v` / `i2v` / `r2v` all ship today, and `gflow video extend` continues an existing clip past Flow's 8s ceiling.
-- **Project-scoped Characters.** Create one from generated references or import an original sheet with `gflow character import`; the import is a separate non-generating workflow.
+- **Project-scoped Characters.** Create one from generated references or import an original sheet with `gflow character import`; replace existing portrait/full-body references using `gflow character update-images`. Import and update are non-generating workflows with replay-safe operation UUIDs.
 - **Prompt tools.** `--tool creative-director` rewrites a terse prompt into a vivid one (Google's 5-component formula) before generating — on any command. Bring your own with [My Tools](docs/TOOLS.md).
 - **Pipelines.** Wire Veo into your content automation, AI-video stack, or batch experiments.
 - **Terminal-native.** After one `gflow auth login`, you stay in the shell. No clicking through dialogs.

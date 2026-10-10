@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Existing Character image replacement through CLI `character update-images`
+  and native MCP `gflow_character_update_images`. Portrait and full-body inputs
+  are separate; exact native readback verifies slots and preserved metadata.
+  An operation UUID journals intent and bindings; verified replay is read-only,
+  and interrupted/uncertain updates cannot blindly re-upload. No generation,
+  duplicate Character, or media deletion is performed.
+
 - AutoFlow project reuse: CLI `project bind/context` and MCP `gflow_project_bind`
   / `gflow_project_context` persist one existing project and selected Character IDs
   per profile. Normal image/video calls reuse it when no explicit ID/title is given;

@@ -32,6 +32,7 @@ The user wants to:
 - Build a batch pipeline for video generations
 - Create a project-scoped Flow **Character** (a named subject with reference images, optional voice + personality) for supported identity-reference paths (`gflow character`)
 - Import an existing image sheet into a native, project-scoped Flow Character without invoking image generation (`gflow character import`)
+- Replace existing portrait/full-body slots using `gflow character update-images` or `gflow_character_update_images` MCP. Use approved single images, exact project/entity UUIDs and a stable operation UUID; preserve omitted slots and metadata. Never retry uncertain uploads or create a replacement Character.
 - Compose ordered clips into a **scene** and optionally render a credit-free server-side extended video (`gflow scene`)
 - Stitch a multi-clip story where each clip is seeded by the previous clip's last frame (`gflow video chain`)
 - Use their Flow credits via script instead of clicking through the UI

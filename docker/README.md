@@ -132,6 +132,11 @@ is published to `127.0.0.1` only for the same reason.
 
 ## Verified on this image
 
+Source-preview branches can pin an unpublished prerelease. This update is
+installed from source, not published to PyPI; the default Docker install cannot
+resolve that prerelease until it is published. The measurements below remain
+historical and do not verify this preview image.
+
 CI's matrix is `["3.11","3.12","3.13"]`, so the 3.14 base is not covered by the test suite.
 A container pins its interpreter, so this is deterministic rather than an ambient version that
 could surprise someone — and the gap is closed by verifying the image's runtime contract directly
@@ -148,12 +153,12 @@ tools/list       : OK, 15 tools
 
 Re-run that after any base-image bump. If it stops holding, the interpreter is the first suspect.
 
-> **Measured on the 0.75.0 image, not re-measured for 0.76.0.** The numbers above and in the
+> **Measured on the 0.75.0 image, not re-measured for this source preview.** The numbers above and in the
 > table below are a record of a run, so they are left as they were rather than edited to match
 > the current version — a quoted measurement that tracks `pyproject.toml` is not a measurement.
 > `ARG GFLOW_VERSION` *is* gated against the repo version by
-> `tests/test_dockerfile_version_pin.py`, so the image installs 0.76.0; what is unverified is
-> that the runtime contract still holds on it. Re-running the block above on a WSL-integrated
+> `tests/test_dockerfile_version_pin.py`; resolving that pin also requires publication to
+> PyPI. The current preview image and runtime contract are unverified. Re-running the block above on a WSL-integrated
 > Docker host is what would settle it.
 
 ## Benchmark — measured 2026-09-15

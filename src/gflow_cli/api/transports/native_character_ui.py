@@ -136,6 +136,9 @@ async def _read_project_payload(page: Page, project_id: str, *, timeout_s: float
     return payload
 
 
+read_native_project_payload = _read_project_payload
+
+
 async def read_native_characters(
     page: Page,
     project_id: str,

@@ -75,19 +75,19 @@ def _canonical_import_uuid(value: str, option: str) -> str:
     return canonical
 
 
-def _validated_import_sheet(path: Path) -> Path:
+def _validated_import_sheet(path: Path, option: str = "--sheet") -> Path:
     """Resolve and inspect the source image before any browser/profile startup."""
     try:
         resolved = path.expanduser().resolve(strict=True)
     except (OSError, RuntimeError) as exc:
-        raise click.BadParameter("must name an existing image file", param_hint="--sheet") from exc
+        raise click.BadParameter("must name an existing image file", param_hint=option) from exc
     if not resolved.is_file():
-        raise click.BadParameter("must name an image file, not a directory", param_hint="--sheet")
+        raise click.BadParameter("must name an image file, not a directory", param_hint=option)
     try:
         asyncio.run(validate_image_file(resolved))
     except (OSError, ValueError) as exc:
         raise click.BadParameter(
-            "must be a supported image within the upload size limit", param_hint="--sheet"
+            "must be a supported image within the upload size limit", param_hint=option
         ) from exc
     return resolved
 
@@ -211,6 +211,71 @@ async def _run_import(
         for workflow_id, media_id in result.readback.workflow_media_bindings:
             console.print(f"  workflow/media: {workflow_id} -> {media_id}")
         console.print(f"  source SHA-256: {result.source_sha256}")
+
+
+# ---------------------------------------------------------------------------
+# update-images — existing entity, upload only
+# ---------------------------------------------------------------------------
+
+
+@character.command("update-images")
+@click.option("--project", "project_id", required=True, help="Existing Flow project UUID.")
+@click.option("--entity-id", required=True, help="Existing Character UUID; never creates one.")
+@click.option("--operation-id", required=True, help="Caller UUID; replay never repeats uploads.")
+@click.option("--portrait", "portrait_path", type=click.Path(path_type=Path), default=None)
+@click.option("--full-body", "full_body_path", type=click.Path(path_type=Path), default=None)
+@click.option("--profile", default=None, help="Profile name (overrides default).")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Emit JSON output.")
+def update_character_images(
+    project_id: str,
+    entity_id: str,
+    operation_id: str,
+    portrait_path: Path | None,
+    full_body_path: Path | None,
+    profile: str | None,
+    as_json: bool,
+) -> None:
+    """Replace existing Character image slots; preserve metadata and omitted slots."""
+    for value, option in (
+        (project_id, "--project"),
+        (entity_id, "--entity-id"),
+        (operation_id, "--operation-id"),
+    ):
+        _canonical_import_uuid(value, option)
+    if portrait_path is None and full_body_path is None:
+        raise click.UsageError("Provide --portrait and/or --full-body.")
+    portrait = _validated_import_sheet(portrait_path, "--portrait") if portrait_path else None
+    full_body = _validated_import_sheet(full_body_path, "--full-body") if full_body_path else None
+    profile_name = _resolve_profile(profile)
+    profile_dir = _make_provider_dir(profile_name)
+    settings = get_settings()
+
+    async def run() -> None:
+        from gflow_cli.services.character_update import character_update_images
+
+        recorder = OperationRecorder.open(settings)
+        try:
+            async with FlowApiClient(profile_dir=profile_dir, headless=settings.headless) as client:
+                result = await character_update_images(
+                    client,
+                    recorder,
+                    profile_name=profile_name,
+                    profile_dir=profile_dir,
+                    project_id=project_id,
+                    entity_id=entity_id,
+                    operation_id=operation_id,
+                    portrait=portrait,
+                    full_body=full_body,
+                )
+        finally:
+            recorder.close()
+        payload = {**result, "project": project_id, "entity_id": entity_id}
+        if as_json:
+            json_output.emit(payload)
+        else:
+            console.print(f"Character images verified: {entity_id}")
+
+    run_with_handlers(run, cli_command="character update-images", as_json=as_json)
 
 
 # ---------------------------------------------------------------------------

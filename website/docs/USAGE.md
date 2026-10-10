@@ -1239,6 +1239,31 @@ workflow binding, then reloads the Character form to confirm the requested name
 and personality. The result includes stable IDs and a source SHA-256, not the
 local path.
 
+### `gflow character update-images`
+
+Replace portrait and/or full-body references on an **existing** Character.
+Uploads only; no generation, new Character, or project is created.
+
+```text
+gflow character update-images --project PROJECT_UUID --entity-id CHARACTER_UUID
+                              --operation-id OPERATION_UUID
+                              [--portrait PORTRAIT_PATH] [--full-body BODY_PATH]
+                              [--profile NAME] [--json]
+```
+
+At least one image is required. Use one portrait and one full-body image rather
+than a multi-view sheet. Slots not supplied and all Character metadata remain
+unchanged. UUIDs must be canonical; source files must be readable supported
+PNG/JPEG/WebP/GIF images within the upload limit. Validation precedes browser
+startup. The CLI and `gflow_character_update_images` MCP tool share one service.
+
+The operation journal records intent before mutation and each upload binding.
+Success requires fresh, exact slot and metadata readback. Replaying the same
+operation UUID with identical bytes only verifies the saved state; it never
+uploads again. Changed inputs or incomplete checkpoints are refused. A partial
+failure may already have cleared or replaced a slot: inspect its journal and
+remote Character before continuing. There is no automatic retry or rollback.
+
 ### `gflow character create`
 
 > ⚠️ **Costs credits.** `create` runs **two paid image generations**: a face

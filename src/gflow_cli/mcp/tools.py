@@ -1636,6 +1636,71 @@ async def gflow_character_import(
 
 
 @server.tool(
+    name="gflow_character_update_images",
+    description=(
+        "Replace the portrait and/or full-body image of an existing Flow Character. "
+        "Uploads existing local images only; never creates a Character or generates media. "
+        "Requires exact project/entity UUIDs and a caller operation UUID. Omitted slots "
+        "and Character metadata are preserved. Success requires fresh native readback. "
+        "Replay is read-only; an interrupted update is never blindly uploaded again."
+    ),
+)
+@_guarded
+async def gflow_character_update_images(
+    project: str,
+    entity_id: str,
+    operation_id: str,
+    portrait_path: str | None = None,
+    full_body_path: str | None = None,
+    profile: str = _DEFAULT_PROFILE,
+) -> dict[str, Any]:
+    """Replace existing Character image slots without generation or metadata edits."""
+    if not all(_is_canonical_uuid(value) for value in (project, entity_id, operation_id)):
+        return _bad_param("Invalid UUID", "project, entity_id and operation_id must be UUIDs.")
+    if portrait_path is None and full_body_path is None:
+        return _bad_param("No images supplied", "Provide portrait_path and/or full_body_path.")
+    from gflow_cli.api.client import validate_image_file
+
+    paths: dict[str, Path | None] = {"portrait": None, "full_body": None}
+    try:
+        for slot, value in (("portrait", portrait_path), ("full_body", full_body_path)):
+            if value is not None:
+                path = Path(value).expanduser().resolve(strict=True)
+                if not value.strip() or not path.is_file():
+                    raise ValueError
+                await validate_image_file(path)
+                paths[slot] = path
+    except (OSError, RuntimeError, ValueError):
+        return _bad_param("Invalid image", "Provide readable supported local image files.")
+    resolved = _resolve_and_validate_profile(profile)
+    if isinstance(resolved, dict):
+        return resolved
+    from gflow_cli.data.recorder import OperationRecorder
+    from gflow_cli.services.character_update import character_update_images
+
+    settings = get_settings()
+    profile_dir = settings.profile_subdir(resolved)
+    async with _profile_lock(resolved):
+        recorder = OperationRecorder.open(settings)
+        try:
+            async with FlowApiClient(profile_dir=profile_dir, headless=settings.headless) as client:
+                result = await character_update_images(
+                    client,
+                    recorder,
+                    profile_name=resolved,
+                    profile_dir=profile_dir,
+                    project_id=project,
+                    entity_id=entity_id,
+                    operation_id=operation_id,
+                    portrait=paths["portrait"],
+                    full_body=paths["full_body"],
+                )
+        finally:
+            recorder.close()
+    return {"status": "ok", "project": project, "entity_id": entity_id, "images": result["images"]}
+
+
+@server.tool(
     name="gflow_download_media",
     description=(
         "Fetch an already-generated VIDEO from Flow by its media ID and write it to "

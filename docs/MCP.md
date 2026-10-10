@@ -132,6 +132,17 @@ The server registers three protocol surfaces:
   form to verify name and personality. The result returns stable IDs and
   `source_sha256`, not a local path or signed URL. The observed upload was not billed,
   but that observation is not a general Flow billing guarantee.
+* `gflow_character_update_images(project, entity_id, operation_id, portrait_path=None, full_body_path=None, profile="default")`:
+  Replaces selected image slots on an existing native Character. Supply a single
+  portrait image and/or a single full-body image, not a collage. Omitted slots,
+  name, personality, voice and other Character metadata are preserved. Original
+  validated bytes are uploaded; no Character or generated media is created.
+  Success requires exact fresh project/entity/slot/workflow/media readback.
+  Results contain stable IDs and source hashes, never paths or signed URLs.
+  Reuse the same canonical operation UUID only with identical inputs. Verified
+  replay is read-only; an incomplete or uncertain operation refuses re-upload.
+  A clear or upload can persist before a later failure: inspect the journal and
+  Character before starting a new operation. This is not an atomic two-slot edit.
 * `gflow_character_list(project, profile)`: Lists a project's saved Flow CHARACTER
   entities with their **entity ids** — read-only and browser-driven. This is how an
   agent discovers what it can attach: an `entity_id` goes to `reference_entities`,

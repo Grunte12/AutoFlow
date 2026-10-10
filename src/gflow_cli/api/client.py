@@ -3304,6 +3304,45 @@ class FlowApiClient:
         finally:
             self._checkin_page(page)
 
+    async def read_character_image_state(self, project_id: str, entity_id: str) -> dict[str, Any]:
+        """Read exact native slots and metadata without changing the Character."""
+        from gflow_cli.api.transports.native_character_update import (  # noqa: PLC0415
+            read_character_image_state,
+        )
+
+        page = await self._checkout_page()
+        try:
+            return await read_character_image_state(page, project_id, entity_id)
+        finally:
+            self._checkin_page(page)
+
+    async def replace_character_images(
+        self,
+        *,
+        project_id: str,
+        entity_id: str,
+        images: dict[str, bytes],
+        before: dict[str, Any],
+        checkpoint: Callable[[str, dict[str, str]], Awaitable[None]],
+    ) -> dict[str, Any]:
+        """Upload only through the operation-aware Character update service."""
+        from gflow_cli.api.transports.native_character_update import (  # noqa: PLC0415
+            replace_character_images,
+        )
+
+        page = await self._checkout_page()
+        try:
+            return await replace_character_images(
+                page,
+                project_id=project_id,
+                entity_id=entity_id,
+                images=images,
+                before=before,
+                checkpoint=checkpoint,
+            )
+        finally:
+            self._checkin_page(page)
+
     async def patch_entity(
         self,
         *,

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, cast
 from urllib.parse import urlsplit
 from uuid import UUID
 
+from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from gflow_cli.api.transports.batchexecute import parse_frames
@@ -63,14 +64,18 @@ def _uuid(value: object) -> str:
 
 async def _unique(page: Page, selector: str, control: str) -> Locator:
     locator = page.locator(selector)
-    if await locator.count() != 1:
+    try:
+        await locator.wait_for(timeout=5_000)
+        if await locator.count() != 1:
+            raise ValueError
+    except (PlaywrightError, ValueError) as exc:
         raise UiSelectorDriftError(
             f"native Character {control} control is missing or ambiguous",
             route="native:characterImport",
             remediation_hint=(
-                "Inspect the native Character form; do not repeat an uncertain import."
+                "Inspect the native Character form; do not repeat an uncertain operation."
             ),
-        )
+        ) from exc
     return locator
 
 
@@ -130,6 +135,16 @@ def _parse_upload_reply(payload: object, project_id: str) -> tuple[str, str, str
             route="native:characterImport",
             remediation_hint=_UNCERTAIN,
         ) from exc
+
+
+# Shared native Character form primitives; both import and update use the same
+# observed route and upload acknowledgement rather than separate UUID heuristics.
+CHARACTER_DONE = _DONE
+CHARACTER_HYDRATED = _HYDRATED
+canonical_character_uuid = _uuid
+unique_character_control = _unique
+character_route_entity = _route_entity
+parse_character_upload_binding = _parse_upload_reply
 
 
 async def import_native_character(
