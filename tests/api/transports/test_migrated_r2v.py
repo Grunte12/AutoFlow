@@ -199,6 +199,7 @@ class FakeComposerPage:
         self.enters = 0
         self.upload_clicked = 0
         self.composer_clicks = 0
+        self.evaluate_calls: list[tuple[str, Any]] = []
 
     def on_enter(self) -> None:
         self.enters += 1
@@ -212,7 +213,7 @@ class FakeComposerPage:
     def locator(self, css: str) -> FakeLoc:
         if css == "[contenteditable='true']":
             return FakeLoc(self, "composer", ["composer"])
-        if css == "button.asset-item[role='option']":
+        if css in ("button.asset-item[role='option']", "button.asset-item[role='option']:visible"):
             return FakeLoc(self, "asset", list(self.assets))
         if css == "button":
             return FakeLoc(self, "button", ["button"])
@@ -224,6 +225,7 @@ class FakeComposerPage:
         return None
 
     async def evaluate(self, _script: str, _arg: Any = None) -> Any:
+        self.evaluate_calls.append((_script, _arg))
         return self.chips
 
 
@@ -240,6 +242,17 @@ async def test_each_reference_must_land_as_its_own_chip() -> None:
     # ENTER is what commits a mention — a typed query alone inserts nothing.
     assert page.typed.count("<Enter>") == 2
     assert len(page.chips) == 2
+
+
+async def test_mention_places_caret_at_dom_end_without_clicking_composer() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakeComposerPage()
+    await MigratedComposer()._mention_by_name(page, "me.jpg", expect_chips=1)  # noqa: SLF001
+
+    placements = [script for script, _ in page.evaluate_calls if "collapse(false)" in script]
+    assert placements, "mention typing must explicitly place the DOM caret at editor end"
+    assert page.composer_clicks == 0, "clicking can move the caret into a prior mention chip"
 
 
 async def test_a_picker_that_misses_the_first_query_is_retried() -> None:
@@ -288,6 +301,27 @@ async def test_a_reference_that_does_not_attach_is_refused_before_submit() -> No
     assert "me.jpg" in message
     assert "somethingelse" in message  # says what the picker DID offer
     assert page.enters == FRAME_SEARCH_ATTEMPTS  # every attempt spent before giving up
+
+
+async def test_empty_picker_never_presses_enter() -> None:
+    """Enter with no visible option can submit/generate instead of selecting a mention."""
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakeComposerPage(assets=[], chips_per_enter=0)
+    with pytest.raises(ReferenceNotFoundError):
+        await MigratedComposer()._mention_by_name(page, "missing.jpg", expect_chips=1)  # noqa: SLF001
+    assert page.typed.count("<Enter>") == 0
+
+
+async def test_clear_composer_selects_editor_dom_instead_of_platform_select_all() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakeComposerPage()
+    await MigratedComposer().clear_composer(page)
+
+    assert any("selectNodeContents(e)" in script for script, _ in page.evaluate_calls)
+    assert "<Control+a>" not in page.typed
+    assert "<Backspace>" in page.typed
 
 
 async def test_the_prompt_is_appended_so_the_mentions_survive() -> None:

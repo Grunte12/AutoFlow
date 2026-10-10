@@ -1072,7 +1072,9 @@ async def gflow_generate_video(  # NOSONAR
             not unique. Satisfies r2v's reference requirement on its own.
         reference_entity_names: Optional display names paired positionally with
             ``reference_entities`` (mirrors ``--reference-entity-name``); used
-            only to filter the picker, the ids remain the identity.
+            only to filter the picker, the ids remain the identity. On
+            flow.google.com, saved-Character r2v requires these paired names
+            and count one; other entity modes remain refused before billing.
         model: Optional Veo model — 'veo_lite', 'veo_fast', 'veo_quality',
             'omni_flash' (aliases accepted, mirrors the CLI ``--model``). When
             omitted, Flow's UI default applies EXCEPT for i2v with frames,
@@ -1084,10 +1086,12 @@ async def gflow_generate_video(  # NOSONAR
             4/6/8 on the Veo 3.1 models, 4/6/8/10 on ``omni_flash``; whether the
             account's cohort renders the control is decided pre-submit at zero cost.
             When omitted, Flow's per-model default applies. On the migrated
-            flow.google.com host an 'r2v' request accepts only 8 and pins it when
-            omitted — Flow offers reference-to-video at its base tier alone, and at
-            4 or 6 it drops the references and bills a text-to-video clip instead of
-            refusing; any other value returns the exit-11-equivalent envelope.
+            flow.google.com host an 'r2v' request pins 8 when omitted and also
+            accepts explicit ``model='omni_flash', duration=10``. A blocked native
+            MCP submit verified two Character plus two image bindings at 10s.
+            This proves input binding, not render quality or every model/duration.
+            Other non-8s combinations remain refused pre-submit as unverified;
+            never downgrade or retry automatically.
         resolution: Optional video resolution — '360p' or '720p' (omni-flash only,
             mirrors the CLI ``--resolution``). When omitted, Flow's default applies. On any
             other model, or on the labs editor, the job fails pre-submit with the
@@ -1107,14 +1111,16 @@ async def gflow_generate_video(  # NOSONAR
             auto-select if exactly one profile exists.
         project: Optional existing Flow project id to generate into (mirrors the
             CLI ``--project`` flag on ``video t2v``/``i2v``/``r2v``). When
-            omitted, a fresh project is created (titled ``project_name`` when
-            given) on labs.google or flow.google.com, whichever serves the
+            omitted, an opt-in profile project binding is reused; otherwise a
+            fresh project is created (titled ``project_name`` when given)
+            on labs.google or flow.google.com, whichever serves the
             account. On an account served flow.google.com (``GFLOW_CLI_FLOW_HOST``,
             read from the server/daemon environment, not per call) the ported
             modes are 't2v'; 'i2v' with a local ``initial_frame`` with or without
-            a local ``end_frame``; and 'r2v' with local ``reference_images``. A UUID
-            frame, an end frame by UUID/``@Name``, and r2v by ``ref_names`` or
-            ``reference_entities`` return the exit-36-equivalent envelope.
+            a local ``end_frame``; and 'r2v' with local ``reference_images``
+            and/or saved Characters at count one with paired IDs/names. A UUID
+            frame, an end frame by UUID/``@Name``, or another unported entity
+            form returns the exit-36-equivalent envelope.
         ui_mode: Required Flow UI arm (mirrors the CLI ``--ui-mode`` on
             ``video t2v``/``i2v``; applies to every mode of this tool,
             including 'r2v'). Video generation only has a classic driver:

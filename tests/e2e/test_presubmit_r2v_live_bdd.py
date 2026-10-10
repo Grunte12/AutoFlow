@@ -13,7 +13,7 @@ from playwright.async_api import Route
 from pytest_bdd import given, scenarios, then, when
 
 from gflow_cli.api.client import FlowApiClient
-from gflow_cli.api.video import Aspect, GenerateVideoRequest, Mode, VideoModel, is_media_uuid
+from gflow_cli.api.video import Aspect, GenerateVideoRequest, Mode, is_media_uuid
 from gflow_cli.config import reset_settings
 from gflow_cli.errors import PreSubmitConfigurationError, ProblemDetails
 
@@ -43,7 +43,10 @@ def binding(monkeypatch: pytest.MonkeyPatch) -> tuple[Path, str]:
     return path, project
 
 
-@when("the real client receives a 10s Omni reference video request", target_fixture="result")
+@when(
+    "the real client receives a model-omitted 10s reference video request",
+    target_fixture="result",
+)
 def run_request(binding: tuple[Path, str], tmp_path: Path) -> tuple[ProblemDetails, list[str]]:
     async def run() -> tuple[ProblemDetails, list[str]]:
         path, project = binding
@@ -54,7 +57,7 @@ def run_request(binding: tuple[Path, str], tmp_path: Path) -> tuple[ProblemDetai
             prompt="Pre-submit regression; must not generate.",
             mode=Mode.R2V,
             aspect=Aspect.PORTRAIT,
-            model=VideoModel.OMNI_FLASH,
+            model=None,
             duration=10,
             reference_images=(reference,),
         )

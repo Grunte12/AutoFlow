@@ -273,7 +273,7 @@ def _picker_query(ref: ImageRef) -> str:
 
 #: The Ingredients sub-mode holds references; Frames holds the i2v chips.
 INGREDIENTS_LIGATURE = "chrome_extension"
-#: The only duration at which this host offers reference-to-video. Measured 2026-09-06 at
+#: The conservative default for reference-to-video. Measured 2026-09-06 at
 #: $0 on a cohort that DOES render a duration row for Veo 3.1 Lite [Lower Priority]
 #: (`capture_migrated_r2v_production_submit.py`, three route-blocked runs, same account,
 #: model, references and gestures — only the duration changed):
@@ -294,17 +294,25 @@ def validate_migrated_video_configuration(request: GenerateVideoRequest) -> None
     """Apply the driver's measured R2V safety policy, without browser gestures.
 
     This is NOT a universal Flow capability report. The 8s baseline was measured
-    with Veo Lite; other model/duration combinations require fresh binding proof.
+    with Veo Lite. Explicit Omni Flash 10s also preserved two image and two
+    Character bindings in a blocked native MCP submit on 2026-10-10. Other
+    model/duration combinations require fresh binding proof.
     Call before any generation dispatch for this operation. Never downgrade the
     requested duration or suggest changing hosts as a capability workaround.
     """
-    if request.mode is Mode.R2V and request.duration not in (None, R2V_DURATION_S):
+    verified_omni_10s = request.model is VideoModel.OMNI_FLASH and request.duration == 10
+    if (
+        request.mode is Mode.R2V
+        and request.duration not in (None, R2V_DURATION_S)
+        and not verified_omni_10s
+    ):
         raise PreSubmitConfigurationError(
             detail=(
                 f"AutoFlow has not verified reference-preserving R2V at {request.duration}s "
                 "on the migrated composer. The request was refused before submission; "
-                "the requested duration was not changed. The driver's verified baseline "
-                f"is {R2V_DURATION_S}s, not proof that other lengths are absent from Flow."
+                "the requested duration was not changed. Verified input bindings cover "
+                f"the {R2V_DURATION_S}s baseline and explicit Omni Flash at 10s, "
+                "not proof that other lengths are absent from Flow."
             ),
             setting="duration",
             requested_value=request.duration,
@@ -2340,7 +2348,13 @@ class MigratedComposer:
 
     async def clear_composer(self, page: Page) -> None:
         await page.locator(COMPOSER).first.click(timeout=5000)
-        await page.keyboard.press("Control+a")
+        # Mac Control+A moves the caret; select only this editor's DOM instead.
+        await page.evaluate(
+            "sel => { const e=document.querySelector(sel); e.focus(); "
+            "const r=document.createRange(); r.selectNodeContents(e); "
+            "const s=getSelection(); s.removeAllRanges(); s.addRange(r); }",
+            COMPOSER,
+        )
         await page.keyboard.press("Backspace")
         await page.wait_for_timeout(600)
 
@@ -2369,7 +2383,13 @@ class MigratedComposer:
         chips = await self.read_chips(page)
         for attempt in range(1, FRAME_SEARCH_ATTEMPTS + 1):
             before = len(chips)
-            await page.locator(COMPOSER).first.click(timeout=5000)
+            # Append explicitly so clicking cannot move the caret into a prior chip.
+            await page.evaluate(
+                "sel => { const e=document.querySelector(sel); e.focus(); "
+                "const r=document.createRange(); r.selectNodeContents(e); r.collapse(false); "
+                "const s=getSelection(); s.removeAllRanges(); s.addRange(r); }",
+                COMPOSER,
+            )
             # `keyboard.type`, never `insert_text`: the latter dispatches input events with
             # no key events, so the mention plugin opens a picker with no query behind it
             # and every later gesture is a no-op. `send_prompt` keeps insert_text on
@@ -2379,9 +2399,14 @@ class MigratedComposer:
             await page.wait_for_timeout(2200)
             await page.keyboard.type(name, delay=100)
             await page.wait_for_timeout(2500)
-            offered = [t.strip() for t in await page.locator(PICKER_OPTION).all_text_contents()]
-            await page.keyboard.press("Enter")
-            await page.wait_for_timeout(2500)
+            offered = [
+                t.strip()
+                for t in await page.locator(f"{PICKER_OPTION}:visible").all_text_contents()
+            ]
+            # Enter outside a visible picker could submit a paid generation.
+            if offered:
+                await page.keyboard.press("Enter")
+                await page.wait_for_timeout(2500)
             chips = await self.read_chips(page)
             if len(chips) == expect_chips:
                 await page.keyboard.type(" ", delay=80)

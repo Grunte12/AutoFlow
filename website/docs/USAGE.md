@@ -797,15 +797,20 @@ gflow video r2v "blend these worlds" --ref a.png --ref b.png --ref c.png --model
 > whose references have not all attached is refused **before** submit (exit 32), and the
 > app's own submit body must carry every uploaded media id with a reference-to-video model
 > key (exit 7 otherwise) — the failure being a full-price clip with none of your references
-> on it. References given by `@Name` or `--reference-entity` (character entities) exit 36
-> there; an unmoved account keeps the labs driver for those.
+> on it. Saved Character entities are also supported with count one and paired
+> `--reference-entity` / `--reference-entity-name` values; IDs remain the identity.
+> Other entity modes remain refused before submission.
 >
-> **An explicit non-8s `--duration` is refused before submission (exit 11).**
+> **Explicit Omni Flash R2V at 10 seconds is now admitted.** Use
+> `--model omni-flash --duration 10 --count 1`. A blocked native MCP request
+> verified the 10-second R2V key, two image references, two saved Characters,
+> and exact prompt text. This verifies inputs, not rendered video quality.
+> Other non-8s combinations are refused before submission (exit 11).
 > This is the migrated driver's evidence-limited safety policy, not proof that Flow
 > offers R2V only at 8s. A Veo Lite capture preserved references at 8s but degraded
 > 4s/6s requests to text-to-video with the uploaded names instead of references
 > (route-blocked at zero credits, 2026-09-06). Other model/duration combinations,
-> including 10s, remain unverified by this driver. The refusal preserves your requested
+> including 10s with the model omitted, remain unverified by this driver. The refusal preserves your requested
 > duration and reports `capability="unverified"`; inspect the selected model's controls
 > and reference binding before explicitly approving a changed request. Do not
 > automatically downgrade, force another host, or retry. Omitted duration still pins

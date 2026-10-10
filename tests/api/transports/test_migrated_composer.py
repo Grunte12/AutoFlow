@@ -1028,7 +1028,8 @@ async def test_r2v_with_an_explicit_degrading_duration_is_refused_before_submit(
     with pytest.raises(PreSubmitConfigurationError) as exc_info:
         await MigratedComposer().apply_video_settings(page, _r2v_request(duration=4))
     message = str(exc_info.value)
-    assert "at 4s" in message and "verified baseline is 8s" in message
+    assert "at 4s" in message and "8s baseline" in message
+    assert "explicit Omni Flash at 10s" in message
     assert "not proof that other lengths are absent from Flow" in message
     proof = exc_info.value.to_problem_details()
     assert proof["submission_state"] == "not_submitted"

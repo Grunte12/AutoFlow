@@ -33,6 +33,12 @@
 
 ## Why gflow-cli?
 
+AutoFlow source preview 0.83.0a5 admits explicit Omni Flash R2V at 10 seconds.
+Its blocked native MCP verification preserved two Characters and two images;
+this is input proof, not a rendered-video guarantee. See the
+[verification and limitations](docs/LIVE_VERIFICATION_v0.83.0a5.md).
+This owner-repository preview is not a PyPI or Docker registry release.
+
 You have a Google account with Flow access, you have Veo credits, and you run real batch work. gflow-cli gives you:
 
 - **Batch generation.** Loop prompts straight from the shell: `for p in $(cat prompts.txt); do gflow image t2i "$p"; done`. Image batching plus `gflow video t2v` / `i2v` / `r2v` all ship today, and `gflow video extend` continues an existing clip past Flow's 8s ceiling.
