@@ -2298,9 +2298,9 @@ class MigratedComposer:
     ) -> None:
         """Mention each character by name, then prove the chip is that ENTITY (#723).
 
-        Characters use the native exact-name row, then its detail-panel Add button.
-        Images commit directly; Enter alone does not commit a Character on the
-        currently served picker. The verification is not optional:
+        Characters use the native exact-name row, which either commits directly or
+        opens its detail-panel Add button. Enter is never used for Character selection.
+        The verification is not optional:
 
         **Flow lists characters and media in that one picker and does not rank them.**
         Measured 2026-09-07: the same ``@Kael`` query committed
@@ -2432,11 +2432,11 @@ class MigratedComposer:
                 await option.click(timeout=5000)
                 add_selector = f"{PICKER} button.detail-add-to-prompt-btn"
                 add = page.locator(f"{add_selector}:visible").first
-                await add.wait_for(state="visible", timeout=5000)
                 # A preceding Character's detail can linger while the new row loads.
                 # Exclude search-option names; only the selected detail may confirm it.
                 await page.wait_for_function(
-                    """({sel,name}) => {
+                    """({sel,name,chip_sel,n}) => {
+                      if(document.querySelectorAll(chip_sel).length===n) return true;
                       const b=[...document.querySelectorAll(sel)]
                         .find(e=>e.getClientRects().length);
                       if(!b) return false;
@@ -2446,9 +2446,20 @@ class MigratedComposer:
                         (e.textContent||'').trim()===name) ||
                         [...p.querySelectorAll('input')].some(e=>e.value===name);
                     }""",
-                    arg={"sel": add_selector, "name": name},
+                    arg={
+                        "sel": add_selector,
+                        "name": name,
+                        "chip_sel": MENTION_CHIP,
+                        "n": expect_chips,
+                    },
                     timeout=10000,
                 )
+                # Some picker cohorts commit the row immediately; do not click Add
+                # again. The caller still verifies every new chip's kind and exact ID.
+                if len(await self.read_chips(page)) == expect_chips:
+                    await self._focus_prompt_end(page)
+                    await page.keyboard.type(" ", delay=80)
+                    return
                 await add.click(timeout=5000)
                 await page.wait_for_function(
                     """({sel,n}) => {

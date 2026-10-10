@@ -41,9 +41,10 @@ Other entity video modes and entity image generation remain refused there. The d
 checks request binding and exact new-job attribution; this is not a guarantee that
 the model preserves age, clothing or every marking. Inspect the output against the sheet.
 
-Character selection uses the native detail-panel Add confirmation and checks the
-ordered entity UUIDs before submission. Enter alone is not a Character confirmation
-on the currently observed picker. The opt-in [credit-free parity probe](E2E_TESTING.md#character-picker-parity)
+Character selection accepts either the native row's direct commit or its matching
+detail-panel Add confirmation, and checks ordered entity UUIDs and reference kinds
+before submission. Enter is never used for Character selection.
+The opt-in [credit-free parity probe](E2E_TESTING.md#character-picker-parity)
 compares native and production client inputs using existing assets only.
 
 `@Name` (character) and `--reference-entity` are not two transports — the mention resolver stages the

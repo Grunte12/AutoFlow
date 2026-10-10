@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Saved Character rows that commit directly now skip the already-closed detail
+  confirmation. Detail/Add cohorts remain supported, with ordered UUID and kind
+  checks preserved before submit.
+
 - Saved Character selection now follows the native row -> selected detail -> Add
   confirmation, instead of Enter alone. Appending uses the editor's last paragraph;
   existing image references survive. Missing/ambiguous selections refuse before

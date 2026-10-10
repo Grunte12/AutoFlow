@@ -387,6 +387,7 @@ class FakeCharacterDetailPage(FakeComposerPage):
         detail_name_on_select: str | None = None,
         add_succeeds: bool = True,
         add_reference_type: str = "entity",
+        direct_commit: bool = False,
     ) -> None:
         assets = [name for name in entities]
         assets.extend(duplicate_names)
@@ -395,6 +396,7 @@ class FakeCharacterDetailPage(FakeComposerPage):
         self.detail_name_on_select = detail_name_on_select
         self.add_succeeds = add_succeeds
         self.add_reference_type = add_reference_type
+        self.direct_commit = direct_commit
         self.selected_name: str | None = None
         self.detail_name: str | None = None
         self.add_clicks = 0
@@ -413,6 +415,10 @@ class FakeCharacterDetailPage(FakeComposerPage):
     def select_character(self, name: str) -> None:
         self.selected_name = name
         self.detail_name = self.detail_name_on_select or name
+        if self.direct_commit:
+            self.add_character()
+            self.add_clicks = 0
+            self.detail_name = None
 
     def add_character(self) -> None:
         self.add_clicks += 1
@@ -433,6 +439,8 @@ class FakeCharacterDetailPage(FakeComposerPage):
         self, _expression: str, *, arg: dict[str, Any], timeout: int
     ) -> None:
         del timeout
+        if "chip_sel" in arg and len(self.chips) == arg["n"]:
+            return
         if "name" in arg:
             if self.detail_name == arg["name"]:
                 return
@@ -452,6 +460,36 @@ class FakeEntityPage(FakeCharacterDetailPage):
 
     def __init__(self, *, entities: dict[str, str], **kw: Any) -> None:
         super().__init__(entities=entities, **kw)
+
+
+async def test_direct_character_commit_preserves_media_without_detail_add() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakeEntityPage(entities={"Goofy": "ent-goofy", "Memo": "ent-memo"}, direct_commit=True)
+    existing_media = {"text": "cafe.jpg", "entity_id": "", "reference_type": "media"}
+    page.chips.append(existing_media)
+    await MigratedComposer().attach_character_entities(
+        page, entity_ids=("ent-goofy", "ent-memo"), names=("Goofy", "Memo"), clear=False
+    )
+    assert page.chips[0] == existing_media
+    assert [chip["entity_id"] for chip in page.chips[1:]] == ["ent-goofy", "ent-memo"]
+    assert page.add_clicks == 0
+    assert "<Enter>" not in page.typed
+
+
+@pytest.mark.parametrize("reference_type", ["entity", "media"])
+async def test_direct_character_commit_still_rejects_wrong_binding(reference_type: str) -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakeEntityPage(
+        entities={"Goofy": "wrong-id"}, direct_commit=True, add_reference_type=reference_type
+    )
+    with pytest.raises(ReferenceNotFoundError):
+        await MigratedComposer().attach_character_entities(
+            page, entity_ids=("ent-goofy",), names=("Goofy",)
+        )
+    assert page.add_clicks == 0
+    assert "<Enter>" not in page.typed
 
 
 async def test_character_mentions_land_as_entity_chips() -> None:
