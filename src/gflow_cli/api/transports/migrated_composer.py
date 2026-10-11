@@ -2716,6 +2716,14 @@ class MigratedComposer:
             nonlocal entity_submit
             body = _post_data(request)
             rid = _rpcid(str(request.url)) or _body_rpcid(body)
+            # WuwhI saves prompt history, including R2V state, after a real submit.
+            if (
+                rid == "WuwhI"
+                and _body_rpcid(body) == "WuwhI"
+                and not any(f'"{rpc}"' in body for rpc in SUBMIT_RPCS)
+            ):
+                await route.continue_()
+                return
             if rid not in SUBMIT_RPCS and "_r2v_" not in body:
                 await route.continue_()
                 return

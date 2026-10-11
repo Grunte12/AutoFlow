@@ -317,6 +317,9 @@ the form-decoded body (`body_sha256`), and already-attributed `workflow_id` /
 `missing_baseline`, or `binding_check`. No URL, headers, cookies, tokens, prompt or
 body text is included. Duplicate-submit blocking is unchanged; these diagnostics
 help distinguish actual submit RPCs from other RPCs carrying R2V composer state.
+The measured prompt-history RPC `WuwhI` is excluded only when both URL and body
+identify it and the body contains no known submit RPC. A real/mixed submit or an
+unknown R2V-bearing RPC still reaches the billing guard.
 
 ## Incident diagnostics (shipped, v0.43.0)
 

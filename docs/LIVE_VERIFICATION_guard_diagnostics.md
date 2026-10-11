@@ -43,3 +43,24 @@ unchanged. No generalized logging framework or storage was added.
 The new event has not yet been observed on a real credit-spending submit.
 An owner-authorized next run may supply that evidence; this document does not
 authorize generation or assert the underlying duplicate issue is fixed.
+
+## Subsequent production evidence and exact-carrier repair
+
+An owner-authorized next run from the production chat produced the diagnostic:
+first `MZZa6b` continued, a native video was attributed, then `WuwhI` was blocked
+as duplicate with `known_submit_rpc=false`. Earlier protocol spikes already
+identify `WuwhI` as prompt-history/save carrying the prompt (see
+`superpowers/spikes/2026-09-05-migrated-host-wire-protocol.md`).
+
+The targeted repair excludes only matching URL/body `WuwhI`, with no quoted
+known-submit RPC in the body. Genuine duplicate submit, unknown R2V-bearing RPC,
+spoofed URL and mixed history/submit batch remain blocked. The legitimate WuwhI
+regression failed before the repair and passed afterwards; six harness cases
+cover these boundaries. No new production generation was used to verify repair.
+
+The earlier failed receipt and later successful receipt differ because the error
+future is checked after the initial submit wait, not during terminal polling:
+the late history RPC rejection can happen after that check. The repair addresses
+the evidenced false carrier, without changing error timing or real-duplicate
+policy. Post-repair production generation remains unverified until separately
+authorized; do not claim rendering or Character likeness is fixed.

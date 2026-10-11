@@ -1322,7 +1322,9 @@ def test_matcher_excludes_the_lower_priority_suffix_by_default() -> None:
 # --- prompt + submit --------------------------------------------------------
 
 
-@pytest.mark.parametrize("followup_rpc", [None, "MZZa6b", "stateEcho"])
+@pytest.mark.parametrize(
+    "followup_rpc", [None, "MZZa6b", "stateEcho", "WuwhI", "WuwhISpoof", "WuwhIMixed"]
+)
 async def test_saved_character_null_ack_uses_exact_new_prompt_not_first_status_row(
     followup_rpc: str | None,
 ) -> None:
@@ -1355,11 +1357,15 @@ async def test_saved_character_null_ack_uses_exact_new_prompt_not_first_status_r
     page = FakePage()
     page.dom.prompt = "hello"
     guard: list[Any] = []
+    followup_url_rpc = "WuwhI" if followup_rpc in ("WuwhISpoof", "WuwhIMixed") else followup_rpc
 
     async def register(_pattern: Any, handler: Any) -> None:
         guard.append(handler)
 
     async def continue_request() -> None:
+        if getattr(page, "first_continued", False):
+            return
+        page.first_continued = True
         page._fire_response(
             FakeResponse(
                 _batch_url("MZZa6b"),
@@ -1369,7 +1375,12 @@ async def test_saved_character_null_ack_uses_exact_new_prompt_not_first_status_r
         page._fire_response(FakeResponse(_batch_url("jwpduf"), _frame("jwpduf", [old, rec])))
         if followup_rpc is not None:
             await asyncio.sleep(0)
-            followup = SimpleNamespace(url=_batch_url(followup_rpc), post_data=body)
+            wire_rpc = "MZZa6b" if followup_rpc == "WuwhISpoof" else followup_url_rpc
+            rows = [[wire_rpc, json.dumps(payload), None, "generic"]]
+            if followup_rpc == "WuwhIMixed":
+                rows.append(["MZZa6b", json.dumps(payload), None, "generic"])
+            followup_body = urlencode({"f.req": json.dumps([rows])})
+            followup = SimpleNamespace(url=_batch_url(followup_url_rpc), post_data=followup_body)
             await guard[0](route, followup)
 
     route = SimpleNamespace(continue_=continue_request, abort=AsyncMock())
@@ -1387,7 +1398,7 @@ async def test_saved_character_null_ack_uses_exact_new_prompt_not_first_status_r
             expect_entity_ids=(entity,),
             baseline_media_ids=frozenset({old[0]}),
         )
-        if followup_rpc:
+        if followup_rpc and followup_rpc != "WuwhI":
             with pytest.raises(WireFormatError, match="duplicate"):
                 await call
         else:
@@ -1405,10 +1416,10 @@ async def test_saved_character_null_ack_uses_exact_new_prompt_not_first_status_r
     assert "hello" not in json.dumps(diagnostics)
     assert "private-test-token" not in json.dumps(diagnostics)
     assert body not in json.dumps(diagnostics)
-    if followup_rpc:
+    if followup_rpc and followup_rpc != "WuwhI":
         rejected = diagnostics[-1]
         assert rejected["decision"] == "blocked" and rejected["reason"] == "duplicate"
-        assert rejected["rpc"] == followup_rpc
+        assert rejected["rpc"] == followup_url_rpc
         assert rejected["known_submit_rpc"] is (followup_rpc == "MZZa6b")
         assert rejected["workflow_id"] == rec[2] and rejected["media_id"] == MEDIA
         route.abort.assert_awaited_once()
