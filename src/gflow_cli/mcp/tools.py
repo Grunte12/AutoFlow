@@ -1010,14 +1010,16 @@ def _build_video_payload(
 @server.tool(
     name="gflow_generate_video",
     description=(
-        "Generate a video using Google Flow's Veo model. "
+        "Generate a video using Google Flow (Veo or Omni). "
         "Modes: t2v (text-to-video), i2v (image-to-video), r2v (reference-to-video). "
         "Aspects: 9:16, 16:9. "
         "Optional model (veo_lite/veo_fast/veo_quality/omni_flash), duration (seconds), "
         "and count select the Veo model, clip length, and batch size (CLI parity). "
         "The prompt supports @CharacterName mentions to tag saved project characters by name "
         "(resolves to referenceEntities). Reference a SAVED character via @Name; pass one-off "
-        "ingredient images via reference_images. See docs/REFERENCE_STRATEGIES.md. "
+        "ingredient images via reference_images. Reuse the existing project. "
+        "On flow.google.com saved Characters require r2v, count=1, paired IDs/names. "
+        "Describe each reference's role; binding does not guarantee likeness. "
         "Optional ui_mode ('classic'/'auto') verifies the classic editor pre-submit and aborts "
         "before spending credits if unreachable; 'agentic' is not supported for video. "
         "Returns the local file path to the generated video."

@@ -42,7 +42,7 @@ _CODEX = _REPO / ".codex-plugin" / "plugin.json"
 _AGENTS = _REPO / ".agents" / "plugins" / "marketplace.json"
 
 #: Kept in step with generate_plugin_skills.SHIPPED — asserted below, not assumed.
-_SHIPPED = {"gflow-cli", "video-production", "project-management"}
+_SHIPPED = {"gflow-cli", "video-production", "project-management", "autoflow-mcp"}
 
 #: Names reserved by Anthropic for official marketplaces; a third party using one is blocked.
 _RESERVED_MARKETPLACE_NAMES = {

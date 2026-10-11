@@ -1,6 +1,21 @@
-# Model Context Protocol (MCP) Server for gflow-cli
+# AutoFlow MCP server
 
 This document describes the design, configuration, security model, and developer setup for the `gflow-cli` MCP server.
+
+### Agent guidance and discovery
+
+The server sends a compact workflow hint through MCP server instructions. An
+already exposed tool and schema can be used directly; deferred hosts should
+discover only the required capability and reuse the valid schema. Refresh when
+the server/schema changes or a tool is missing. `gflow_list_tools` enumerates
+prompt-rewriting presets, not MCP tools. Protocol tool discovery may still be
+performed by the client; a skill does not replace schema or permission checks.
+
+The optional `gflow://docs/mcp-guide` resource covers Character images and video
+reference routing. The curated plugin also ships the `autoflow-mcp` skill and a
+conditional Character/prompt reference. MCP-only installation does not install
+skills into a host's filesystem. See [AutoFlow installation](MARKETPLACES.md#autoflow-owner-preview).
+No private project IDs, characters or account paths are bundled in these instructions.
 
 ---
 

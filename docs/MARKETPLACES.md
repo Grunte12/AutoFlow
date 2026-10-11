@@ -1,4 +1,31 @@
-# Marketplaces — where gflow-cli comes from
+# AutoFlow installation and inherited distribution channels
+
+## AutoFlow owner preview
+
+The AutoFlow preview is distributed from [Grunte12/AutoFlow](https://github.com/Grunte12/AutoFlow),
+not the upstream PyPI release. Use the owner preview branch that contains the needed
+features; this agent-guide change is on `feature/autoflow-agent-guide`.
+
+The curated plugin carries four user skills: `autoflow-mcp`, `project-management`,
+`gflow-cli` and `video-production`. The `autoflow-mcp` entrypoint is short; its
+Character reference guide loads only for that work. The compatibility plugin name
+remains `gflow`. Install the executable from the same owner checkout/version as the
+plugin. No additional runtime dependency is needed for the skill.
+
+- Existing MCP connection: updated servers supply short instructions. Read
+  `gflow://docs/mcp-guide` only when needed. MCP does not automatically install
+  filesystem skills into arbitrary clients.
+- Skill-capable client: install the curated plugin from the owner checkout, or
+  copy `skills/autoflow-mcp/` into the client's skill directory, including its
+  `references/` directory. The separate project-management skill is optional.
+- Claude Code's plugin also registers the MCP server; the current Codex manifest
+  supplies skills only, so keep its separately configured MCP connection.
+- A hub may rename tools and hide schemas until selected. Use the published alias
+  and current schema; a skill avoids repeated agent searches, not protocol discovery.
+
+## Inherited upstream channels
+
+The remainder describes the upstream distribution, not publication of this owner preview.
 
 Every place you can install or find gflow-cli, and **what each one actually gives you**. The
 channels differ more than they look: some hand you the whole CLI, some only the MCP server, and
@@ -28,8 +55,8 @@ That is the whole install. Every other row below is a convenience or a discovery
 | Channel | CLI | Skills | MCP server | Notes |
 |---|:--:|:--:|:--:|---|
 | **[PyPI](https://pypi.org/project/gflow-cli/)** | ✅ | — | ✅ | Authoritative. `gflow`, `flow` and `gflow-cli` console scripts. |
-| **Claude Code plugin** | — | ✅ 2 | ✅ | Needs `gflow` already on `PATH`. Ships **disabled**. |
-| **Codex plugin** | — | ✅ 2 | — | Skills only; Codex loads no MCP server from it. |
+| **Claude Code plugin (this checkout)** | — | ✅ 4 | ✅ | Needs `gflow` already on `PATH`. Ships **disabled**. |
+| **Codex plugin (this checkout)** | — | ✅ 4 | — | Skills only; Codex loads no MCP server from it. |
 | **MCP Registry** | — | — | ✅ | Metadata only — clients build `uvx gflow-cli mcp run` from it. |
 | **Glama container** | — | — | ⚠️ | Starts and lists tools. **Cannot generate.** See [CONTAINER.md](CONTAINER.md). |
 | **Catalogs** (Glama page, cursor.directory, MCP Market, skills.sh, awesome-lists) | — | — | — | Discovery only. They link here; they install nothing. |
@@ -59,7 +86,8 @@ refused with exit `11` on purpose.
 /plugin install gflow@gflow-cli
 ```
 
-Installs the `gflow-cli` and `video-production` skills **and** registers the MCP server. It does
+This checkout installs `autoflow-mcp`, `project-management`, `gflow-cli` and
+`video-production` skills **and** registers the MCP server. It does
 **not** install the CLI — `gflow` must already be on your `PATH`, and you must have run
 `gflow auth login --browser chrome` once.
 
@@ -69,7 +97,7 @@ with no prompt of its own, and this server spends your Veo credits. The full rea
 are all in **[MCP.md § 4](MCP.md#4-setup-instructions)** — not repeated here, because a
 duplicated consent explanation is one that eventually contradicts itself.
 
-Only **two** of the repository's skills ship in the plugin. The rest are maintainer workflow
+Only **four** of the repository's skills ship in this checkout's plugin. The rest are maintainer workflow
 (`release`, `check`, `pr-council-review` …) and would be noise in someone else's session. The
 payload is generated, never hand-edited — see [`plugins/README.md`](../plugins/README.md).
 
@@ -80,7 +108,7 @@ codex plugin marketplace add .
 codex plugin add gflow@gflow-cli
 ```
 
-Skills only — invoke them with Codex's `$` syntax (`$gflow:status`). Codex reserves slash
+Skills only — select the bundled AutoFlow MCP skill for connected tool use. Codex reserves slash
 commands for its own surface, so the `/gflow:*` spelling is intentionally not reproduced. The
 Codex IDE extension does not load plugins; include the relevant `skills/<name>/SKILL.md`
 directly there.

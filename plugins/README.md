@@ -19,14 +19,16 @@ plugin cannot follow a pointer — the marketplace installs a *directory*, so th
 must physically live under the plugin root. The rule's purpose is to stop two copies drifting,
 and the generator plus the `--check` gate is how that purpose is met here.
 
-## Why only two skills
+## Why a curated set
 
 `skills/` holds eighteen, and most of them drive *this repo's* development lifecycle — `release`,
 `check`, `pr-council-review`, `sonar`, `doc-review`, `issue-resolve`. Shipping those to a user who
 just wants to drive Google Flow is noise at best and misdirection at worst: an agent that reads
 `release/SKILL.md` will happily try to cut a release of someone else's project.
 
-So the plugin ships exactly `gflow-cli` and `video-production`. The generator's `SHIPPED` tuple is
+The plugin ships `autoflow-mcp`, `project-management`, `gflow-cli` and `video-production`.
+Use `autoflow-mcp` for connected tool workflows; its reference files travel with it.
+The generator's `SHIPPED` tuple is
 the single place that decision lives, and `--check` fails on any directory under the plugin that
 it did not put there — including an empty one left behind by a rename.
 

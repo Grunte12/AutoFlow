@@ -46,7 +46,7 @@ _PLUGIN_SKILLS = _REPO / "plugins" / "gflow" / "skills"
 #: repo's own development lifecycle and is useless — or actively confusing — to a user who
 #: just wants to drive Google Flow. Adding a name here ships it to every installed agent, so
 #: add one only after deciding it is a *user* skill.
-SHIPPED = ("gflow-cli", "video-production", "project-management")
+SHIPPED = ("gflow-cli", "video-production", "project-management", "autoflow-mcp")
 
 _BLOB = "https://github.com/ffroliva/gflow-cli/blob/main/"
 

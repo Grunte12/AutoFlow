@@ -28,8 +28,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]  # src/gflow_cli/mcp → repo r
     uri="gflow://docs/mcp-guide",
     name="MCP Agent Guide",
     description=(
-        "Instructions for AI agents on how to use gflow-cli tools. "
-        "Read this BEFORE making any tool calls."
+        "AutoFlow workflow reference for project reuse, Character images and video inputs. "
+        "Read when needed; already exposed tool schemas can be used directly."
     ),
 )
 async def mcp_guide() -> str:
@@ -44,7 +44,7 @@ async def mcp_guide() -> str:
 
     if no_spend_active():
         return """\
-# gflow-cli MCP Agent Guide (no-spend mode)
+# AutoFlow MCP Agent Guide (no-spend mode)
 
 This server runs in NO-SPEND mode: the credit-spending generate tools
 (`gflow_generate_image`, `gflow_generate_video`) are NOT registered and any
@@ -68,41 +68,54 @@ List available gflow prompt tools (name, title, description, category).
 2. **Generation is disabled here by operator choice.** Do not work around it.
 """
     return """\
-# gflow-cli MCP Agent Guide
+# AutoFlow MCP Agent Guide
 
-You have access to the following tools for generating media via Google Flow:
+Use tools, not shell commands, when operating through MCP.
+Use an exposed tool and its current schema directly. With deferred tools or a
+hub, discover only the needed capability, inspect once, and reuse while valid.
+Refresh when the server/schema changes or a tool is missing. Native names below
+retain gflow_ for compatibility; use the hub's published aliases when applicable.
+gflow_list_tools lists prompt-rewriting presets, NOT MCP capabilities.
 
-## Available Tools
+## Project and Character setup
 
-### gflow_generate_image
-Generate images using Google's Imagen model.
-- **Models:** nano2 (fastest), nano-pro (balanced), image4 (highest quality)
-- **Aspects:** 1:1, 9:16, 16:9, 4:3, 3:4
-- **Count:** 1-4 images per call
+- gflow_project_context reads a cached project/Character binding. Reuse the known
+  project; gflow_list_projects is local history, not a complete Flow inventory.
+- gflow_character_list and gflow_character_show inspect saved Characters in a
+  project. Verify exact IDs and actual reference images, not just display names.
+- gflow_project_bind remembers a selected project and character_names. Binding
+  alone does not attach Characters to every generation.
+- gflow_character_update_images replaces supplied portrait_path/full_body_path
+  slots. Use project, entity_id and a UUID operation_id. Omitted slots and metadata
+  stay unchanged. Replay only identical inputs under the same operation_id;
+  inspect partial/uncertain outcomes before another upload.
 
-### gflow_generate_video
-Generate videos using Google's Veo model.
-- **Modes:** t2v (text-to-video), i2v (image-to-video), r2v (reference-to-video)
-- **Aspects:** 9:16 (portrait), 16:9 (landscape)
-- **Note:** i2v requires `initial_frame`; r2v requires `reference_images`
+Use one close-up and one full-body image when that is the chosen reference setup.
+Keep their identity, age, markings and accessories consistent. Inspect the actual
+saved images after updates. Character info holds stable traits; put important
+scene directions in the video prompt too. Image weights and likeness guarantees
+are not established by a successful upload or entity binding.
 
-### gflow_auth_status
-Credit-free, non-interactive Flow session probe — call it before a generate
-tool to fail fast on expired auth. Login itself is CLI-only.
+## Generation
 
-### gflow_list_projects
-Browse the local project catalog.
+- gflow_auth_status checks the session before generation; login is CLI-only.
+- gflow_generate_image generates images; select model/settings from its schema.
+- gflow_generate_video: i2v requires initial_frame. R2V can use reference_images
+  or saved reference_entities. On flow.google.com, the saved-Character path uses
+  mode=r2v, count=1, project, and positionally paired reference_entity_names.
+  @Name resolves a saved Character; local reference_images are separate inputs.
+  State each reference's role, the scene goal and exact dialogue. A filename is
+  not an identity binding. Native inline chip position is not preserved by the
+  current AutoFlow prompt resolver/composer.
 
-### gflow_list_tools
-List available gflow prompt tools (name, title, description, category).
-
-## Important Rules
-1. **Use tools, not shell commands.** Do NOT run `gflow image t2i ...` via the terminal.
-2. **One generation at a time.** The rate limiter allows bursts of 8 but throttles sustained use.
-3. **Check auth first.** If a tool returns an auth error, advise the user to
-   run `gflow auth login --browser chrome`.
-4. **Credits cost money.** Always confirm with the user before generating,
-   especially video (20 credits each).
+Use wait=true for a normal single job. wait=false returns a queued receipt, not
+a finished clip; use the host's supported task mechanism, not an invented poll
+tool. Recover an existing download with gflow_download_media and known media_id.
+Honor the user's existing credit authorization and scope; do not ask again for
+the same authorized action. Costs vary with the selected operation/model. Never
+resubmit an uncertain generation just because its response/download was delayed.
+Inspect output against the references and report observed quality separately
+from successful tool execution. The optional autoflow-mcp skill adds examples.
 """
 
 

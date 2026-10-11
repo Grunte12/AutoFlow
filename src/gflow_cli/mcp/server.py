@@ -72,6 +72,17 @@ tasks_extension = TasksExtension()
 server = MCPServer(
     name=_SERVER_NAME,
     version=_SERVER_VERSION,
+    instructions=(
+        "AutoFlow operates Google Flow. Use an already exposed tool/schema directly; "
+        "with deferred tools, discover only the required capability and reuse its schema "
+        "until it changes. gflow_list_tools lists prompt presets, not MCP capabilities. "
+        "Reuse the user's project and Character identities. Start with "
+        "gflow_project_context for a cached binding or the known project UUID; "
+        "gflow_list_projects is local history only. For Character setup/reference routing, "
+        "use the autoflow-mcp skill if installed or the optional gflow://docs/mcp-guide "
+        "resource. Honor existing user authorization and server no-spend mode. "
+        "Inspect uncertain outcomes before retrying a mutation or generation."
+    ),
     cache_hints=_CACHE_HINTS,
     extensions=[tasks_extension],
 )

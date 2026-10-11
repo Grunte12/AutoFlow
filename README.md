@@ -1,6 +1,14 @@
 <!-- mcp-name: io.github.ffroliva/gflow-cli -->
 
-# gflow-cli
+# AutoFlow
+
+For agent use, start with the bundled [AutoFlow MCP skill](skills/autoflow-mcp/SKILL.md).
+It routes directly to known tools and covers saved Character images, reference roles
+and project reuse. MCP-only clients receive short server instructions and can read
+`gflow://docs/mcp-guide` when needed. See [installation options](docs/MARKETPLACES.md#autoflow-owner-preview).
+This owner preview is distributed from `Grunte12/AutoFlow`; the package/tool/plugin
+identifiers below retain compatibility names. Existing upstream release links are
+not a release of this AutoFlow preview.
 
 > Python CLI and MCP server for Google Flow. Drive [Veo](https://labs.google/fx/tools/flow) (image-to-video, text-to-video) and Imagen (text-to-image) from your terminal: scripted, batched, pipeline-ready.
 

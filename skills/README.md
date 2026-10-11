@@ -4,6 +4,7 @@ This directory ships installable agent skill docs for `gflow-cli`. Each `SKILL.m
 
 | Skill | Path | `version` |
 |---|---|---|
+| AutoFlow MCP | [`autoflow-mcp/SKILL.md`](autoflow-mcp/SKILL.md) | — |
 | gflow-cli | [`gflow-cli/SKILL.md`](gflow-cli/SKILL.md) | 1.1 |
 | predict | [`predict/SKILL.md`](predict/SKILL.md) | 1.0 |
 | scenario | [`scenario/SKILL.md`](scenario/SKILL.md) | — |
@@ -21,6 +22,11 @@ This directory ships installable agent skill docs for `gflow-cli`. Each `SKILL.m
 | video-production | [`video-production/SKILL.md`](video-production/SKILL.md) + [`clip_qa.py`](video-production/clip_qa.py) | 1.0 |
 
 ## gflow-cli skill
+
+For connected MCP operation, prefer [AutoFlow MCP](autoflow-mcp/SKILL.md). It includes
+selective discovery, project/Character reuse and reference prompting. The CLI skill
+below remains for terminal workflows. Skills are bundled in the curated plugin;
+MCP-only connections receive server instructions and an optional guide resource.
 
 [`gflow-cli/SKILL.md`](gflow-cli/SKILL.md) — describes when to invoke `gflow`, prerequisites, the command surface, recipes, and common errors. Plain Markdown with frontmatter, so it works as both a Claude Code skill and a generic agent reference doc.
 

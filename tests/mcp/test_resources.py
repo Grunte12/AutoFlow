@@ -9,6 +9,8 @@ parameters are ``initial_frame`` / ``reference_images``.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 
@@ -20,3 +22,16 @@ async def test_mcp_guide_names_real_video_params() -> None:
     assert "image_path" not in text, "#495: image_path is not a real parameter"
     assert "initial_frame" in text
     assert "reference_images" in text
+
+
+@pytest.mark.asyncio
+async def test_guidance_only_routes_to_registered_tools(mcp_server) -> None:
+    """The shipped route map must not invent tool names or depend on a hub alias."""
+    from gflow_cli.mcp.resources import mcp_guide
+
+    guide = await mcp_guide()
+    instructions = mcp_server.instructions
+    assert instructions, "MCP-only clients need startup guidance without a resource read"
+    named = set(re.findall(r"\bgflow_[a-z_]+\b", guide + instructions))
+    assert named <= set(mcp_server._tool_manager._tools)
+    assert {"gflow_project_context", "gflow_character_update_images"} <= named

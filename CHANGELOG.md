@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- AutoFlow MCP agent guidance: short server instructions, an optional current
+  reference guide, and a curated `autoflow-mcp` skill with Character image/prompt
+  recipes. Known schemas can be reused without repeated full-tool discovery.
+  The guide corrects the R2V saved-Character route and removes fixed credit claims.
+  Owner preview 0.83.0a9; no change to generation execution or likeness claims.
+
 - Existing Character image replacement through CLI `character update-images`
   and native MCP `gflow_character_update_images`. Portrait and full-body inputs
   are separate; exact native readback verifies slots and preserved metadata.
