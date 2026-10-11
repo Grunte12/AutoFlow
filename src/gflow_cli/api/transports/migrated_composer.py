@@ -2456,16 +2456,16 @@ class MigratedComposer:
                 )
                 # Some picker cohorts commit the row immediately; do not click Add
                 # again. The caller still verifies every new chip's kind and exact ID.
-                if len(await self.read_chips(page)) == expect_chips:
-                    await self._focus_prompt_end(page)
-                    await page.keyboard.type(" ", delay=80)
-                    return
-                await add.click(timeout=5000)
+                if len(await self.read_chips(page)) != expect_chips:
+                    await add.click(timeout=5000)
+                # Direct commits can render a chip before its entity identity hydrates.
                 await page.wait_for_function(
                     """({sel,n}) => {
                       const chips=[...document.querySelectorAll(sel)];
                       const c=chips.at(-1);
-                      return chips.length===n && c?.getAttribute('data-entity-id');
+                      return chips.length===n &&
+                        c?.getAttribute('data-reference-type')==='entity' &&
+                        c.getAttribute('data-entity-id');
                     }""",
                     arg={"sel": MENTION_CHIP, "n": expect_chips},
                     timeout=10000,

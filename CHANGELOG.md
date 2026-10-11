@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- AutoFlow owner preview 0.83.0a10 waits for a saved Character chip's entity
+  identity after both immediate selection and detail/Add confirmation. A chip
+  count alone no longer ends attachment while its ID is still empty. Missing
+  identity, wrong reference type, and ordered ID mismatches still refuse before
+  generation submission; existing image references remain attached.
+
 ### Added
 
 - AutoFlow MCP agent guidance: short server instructions, an optional current

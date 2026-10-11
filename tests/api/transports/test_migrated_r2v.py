@@ -388,6 +388,8 @@ class FakeCharacterDetailPage(FakeComposerPage):
         add_succeeds: bool = True,
         add_reference_type: str = "entity",
         direct_commit: bool = False,
+        hydrate_on_wait: bool = False,
+        missing_entity_id: bool = False,
     ) -> None:
         assets = [name for name in entities]
         assets.extend(duplicate_names)
@@ -397,6 +399,9 @@ class FakeCharacterDetailPage(FakeComposerPage):
         self.add_succeeds = add_succeeds
         self.add_reference_type = add_reference_type
         self.direct_commit = direct_commit
+        self.hydrate_on_wait = hydrate_on_wait
+        self.missing_entity_id = missing_entity_id
+        self.hydration_waits = 0
         self.selected_name: str | None = None
         self.detail_name: str | None = None
         self.add_clicks = 0
@@ -429,6 +434,7 @@ class FakeCharacterDetailPage(FakeComposerPage):
                     "entity_id": (
                         self.entities[self.selected_name]
                         if self.add_reference_type == "entity"
+                        and not (self.hydrate_on_wait or self.missing_entity_id)
                         else ""
                     ),
                     "reference_type": self.add_reference_type,
@@ -445,11 +451,15 @@ class FakeCharacterDetailPage(FakeComposerPage):
             if self.detail_name == arg["name"]:
                 return
             raise PlaywrightTimeoutError("selected Character detail name did not match")
+        if self.hydrate_on_wait and self.chips:
+            self.hydration_waits += 1
+            self.chips[-1]["entity_id"] = self.entities[self.chips[-1]["text"]]
         if (
             "n" in arg
             and len(self.chips) == arg["n"]
             and self.chips
             and self.chips[-1].get("entity_id")
+            and self.chips[-1].get("reference_type") == "entity"
         ):
             return
         raise PlaywrightTimeoutError("Character Add did not bind an entity id")
@@ -473,6 +483,41 @@ async def test_direct_character_commit_preserves_media_without_detail_add() -> N
     )
     assert page.chips[0] == existing_media
     assert [chip["entity_id"] for chip in page.chips[1:]] == ["ent-goofy", "ent-memo"]
+    assert page.add_clicks == 0
+    assert "<Enter>" not in page.typed
+
+
+async def test_immediate_character_chip_waits_for_id_and_preserves_two_media() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakeEntityPage(
+        entities={"Goofy": "ent-goofy", "Memo": "ent-memo"},
+        direct_commit=True,
+        hydrate_on_wait=True,
+    )
+    media = [
+        {"text": name, "entity_id": "", "reference_type": "media"}
+        for name in ("cafe.png", "product.png")
+    ]
+    page.chips.extend(media)
+    await MigratedComposer().attach_character_entities(
+        page, entity_ids=("ent-goofy", "ent-memo"), names=("Goofy", "Memo"), clear=False
+    )
+    assert page.hydration_waits == 2
+    assert page.chips[:2] == media
+    assert [c["entity_id"] for c in page.chips[2:]] == ["ent-goofy", "ent-memo"]
+    assert page.add_clicks == 0
+    assert "<Enter>" not in page.typed
+
+
+async def test_immediate_character_chip_without_id_times_out_before_submit() -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakeEntityPage(entities={"Memo": "ent-memo"}, direct_commit=True, missing_entity_id=True)
+    with pytest.raises(ReferenceNotFoundError, match="confirmation did not finish"):
+        await MigratedComposer().attach_character_entities(
+            page, entity_ids=("ent-memo",), names=("Memo",)
+        )
     assert page.add_clicks == 0
     assert "<Enter>" not in page.typed
 
