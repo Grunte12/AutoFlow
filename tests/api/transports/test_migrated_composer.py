@@ -1322,9 +1322,15 @@ def test_matcher_excludes_the_lower_priority_suffix_by_default() -> None:
 # --- prompt + submit --------------------------------------------------------
 
 
-async def test_saved_character_null_ack_uses_exact_new_prompt_not_first_status_row() -> None:
+@pytest.mark.parametrize("followup_rpc", [None, "MZZa6b", "stateEcho"])
+async def test_saved_character_null_ack_uses_exact_new_prompt_not_first_status_row(
+    followup_rpc: str | None,
+) -> None:
+    import hashlib
     from types import SimpleNamespace
     from urllib.parse import urlencode
+
+    from structlog.testing import capture_logs
 
     from gflow_cli.api.transports.migrated_composer import MigratedComposer
 
@@ -1333,7 +1339,12 @@ async def test_saved_character_null_ack_uses_exact_new_prompt_not_first_status_r
     doc = [None, None, [[[None, [None, None, [entity, "Goofy"]]], ["hello"]]]]
     spec = [doc, None, "abra_r2v_8s", 1, None, None, None, None, None, [[entity]]]
     payload = [[spec], [None, 22, None, None, None, project]]
-    body = urlencode({"f.req": json.dumps([[["MZZa6b", json.dumps(payload), None, "generic"]]])})
+    body = urlencode(
+        {
+            "f.req": json.dumps([[["MZZa6b", json.dumps(payload), None, "generic"]]]),
+            "at": "private-test-token",
+        }
+    )
     rec = _record(3, VIDEO_URL)
     rec[0], rec[2], rec[3] = MEDIA, rec[0], None
     rec[5][6] = [None, None, [doc]]
@@ -1356,6 +1367,10 @@ async def test_saved_character_null_ack_uses_exact_new_prompt_not_first_status_r
             )
         )
         page._fire_response(FakeResponse(_batch_url("jwpduf"), _frame("jwpduf", [old, rec])))
+        if followup_rpc is not None:
+            await asyncio.sleep(0)
+            followup = SimpleNamespace(url=_batch_url(followup_rpc), post_data=body)
+            await guard[0](route, followup)
 
     route = SimpleNamespace(continue_=continue_request, abort=AsyncMock())
     page.route = register  # type: ignore[method-assign]
@@ -1363,14 +1378,42 @@ async def test_saved_character_null_ack_uses_exact_new_prompt_not_first_status_r
         guard[0](route, SimpleNamespace(url=_batch_url("MZZa6b"), post_data=body))
     )  # type: ignore[method-assign]
     started: list[Any] = []
-    result = await MigratedComposer().submit_and_observe(
-        page,
-        poll_timeout_s=2,
-        on_started=started.append,
-        project_id=project,
-        expect_entity_ids=(entity,),
-        baseline_media_ids=frozenset({old[0]}),
+    with capture_logs() as logs:
+        call = MigratedComposer().submit_and_observe(
+            page,
+            poll_timeout_s=2,
+            on_started=started.append,
+            project_id=project,
+            expect_entity_ids=(entity,),
+            baseline_media_ids=frozenset({old[0]}),
+        )
+        if followup_rpc:
+            with pytest.raises(WireFormatError, match="duplicate"):
+                await call
+        else:
+            result = await call
+    diagnostics = [row for row in logs if row["event"] == "migrated.character_guard"]
+    assert diagnostics[0]["decision"] == "continued"
+    assert diagnostics[0]["rpc"] == "MZZa6b"
+    assert (
+        diagnostics[0]["body_sha256"]
+        == hashlib.sha256(
+            migrated_composer._post_data(SimpleNamespace(post_data=body)).encode()
+        ).hexdigest()
     )
+    assert diagnostics[0]["known_submit_rpc"] is True
+    assert "hello" not in json.dumps(diagnostics)
+    assert "private-test-token" not in json.dumps(diagnostics)
+    assert body not in json.dumps(diagnostics)
+    if followup_rpc:
+        rejected = diagnostics[-1]
+        assert rejected["decision"] == "blocked" and rejected["reason"] == "duplicate"
+        assert rejected["rpc"] == followup_rpc
+        assert rejected["known_submit_rpc"] is (followup_rpc == "MZZa6b")
+        assert rejected["workflow_id"] == rec[2] and rejected["media_id"] == MEDIA
+        route.abort.assert_awaited_once()
+        assert page.dom.submit_clicked == 1
+        return
     assert result.media_id == MEDIA and result.workflow_id == rec[2]
     assert len(started) == 1 and started[0].media_id == MEDIA
     assert page.dom.submit_clicked == 1

@@ -31,6 +31,7 @@ matched with a Python-side ``filter(has_text=re.compile(...))`` instead.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import mimetypes
 import re
@@ -2718,6 +2719,20 @@ class MigratedComposer:
             if rid not in SUBMIT_RPCS and "_r2v_" not in body:
                 await route.continue_()
                 return
+            guard_state = (
+                "duplicate"
+                if entity_submit is not None
+                else "missing_baseline"
+                if baseline_media_ids is None or project_id is None
+                else "binding_check"
+            )
+            evidence = {
+                "rpc": rid,
+                "known_submit_rpc": rid in SUBMIT_RPCS,
+                "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+                "workflow_id": workflow.get("id"),
+                "media_id": workflow.get("media_id"),
+            }
             try:
                 if entity_submit is not None or baseline_media_ids is None or project_id is None:
                     raise WireFormatError(
@@ -2732,10 +2747,14 @@ class MigratedComposer:
                     if problem:
                         raise WireFormatError(problem, route=f"batchexecute:{rid}")
             except WireFormatError as exc:
+                log.info(
+                    "migrated.character_guard", decision="blocked", reason=guard_state, **evidence
+                )
                 if not route_error.done():
                     route_error.set_result(exc)
                 await route.abort()
                 return
+            log.info("migrated.character_guard", decision="continued", **evidence)
             await route.continue_()
 
         def on_request(request: Any) -> None:
@@ -2848,6 +2867,7 @@ class MigratedComposer:
                         submitted.set_exception(exc)
                         return
                     workflow["id"] = rec.workflow_id
+                    workflow["media_id"] = rec.media_id
                     log.info(
                         "migrated.submit_observed",
                         rpc=rid,
@@ -2867,6 +2887,7 @@ class MigratedComposer:
                         return
                     if rec is not None:
                         workflow["id"] = rec.workflow_id
+                        workflow["media_id"] = rec.media_id
                         log.info(
                             "migrated.character_submit_attributed",
                             workflow_id=rec.workflow_id,

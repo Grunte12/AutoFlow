@@ -310,6 +310,14 @@ Format defaults to **human-readable on TTY**, **JSON when piped or `GFLOW_CLI_LO
 
 Pipes cleanly into `jq` / Loki / Datadog without configuration. See [`docs/USER_GUIDE.md` § Journey 6](USER_GUIDE.md#journey-6--read-the-structured-logs) for `jq` recipes.
 
+Saved-Character video requests emit `migrated.character_guard` at the intercepted
+request decision. Fields are `rpc`, `known_submit_rpc`, `decision`, the SHA256 of
+the form-decoded body (`body_sha256`), and already-attributed `workflow_id` /
+`media_id` (null before attribution). Blocked decisions add `reason`: `duplicate`,
+`missing_baseline`, or `binding_check`. No URL, headers, cookies, tokens, prompt or
+body text is included. Duplicate-submit blocking is unchanged; these diagnostics
+help distinguish actual submit RPCs from other RPCs carrying R2V composer state.
+
 ## Incident diagnostics (shipped, v0.43.0)
 
 `FlowApiClient` owns one session-scoped `IncidentRecorder`
