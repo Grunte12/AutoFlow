@@ -1582,7 +1582,15 @@ class MigratedComposer:
         # reads "0 option groups" (measured 2026-09-05, $0 run).
         pane = page.locator(OVERLAY).filter(has=page.locator(RADIOGROUP)).last
         try:
-            await pane.locator(RADIOGROUP).first.wait_for(state="visible", timeout=8000)
+            try:
+                await pane.locator(RADIOGROUP).first.wait_for(state="visible", timeout=8000)
+            except PlaywrightTimeoutError:
+                # Flow can consume the first reopen without rendering an overlay.
+                if await page.locator(VISIBLE_OVERLAY).count() or not await trigger.is_visible():
+                    raise
+                await self._click(page, trigger, named=READY_ANCHOR, timeout=5000)
+                pane = page.locator(OVERLAY).filter(has=page.locator(RADIOGROUP)).last
+                await pane.locator(RADIOGROUP).first.wait_for(state="visible", timeout=8000)
         except Exception as e:
             detail = await self._ui_failure_detail(
                 page,
@@ -2661,6 +2669,59 @@ class MigratedComposer:
 
     # --- prompt + submit --------------------------------------------------------
 
+    async def verify_video_surface(
+        self, page: Page, request: GenerateVideoRequest, project_id: str
+    ) -> None:
+        """Read final settings without repairing drift after references were bound."""
+        current = urlsplit(page.url)
+        if current.hostname != "flow.google.com" or current.path.rstrip("/") != (
+            f"/project/{project_id}"
+        ):
+            raise WireFormatError("video creation route changed; not submitted")
+        pane = await self._open_pane(page)
+        try:
+            radios = pane.locator(RADIO)
+            checks: list[tuple[str, Any]] = [
+                ("mode", radios.filter(has=_ligature(page, "videocam"))),
+                ("aspect", radios.filter(has=_ligature(page, ASPECT_LIGATURE[request.aspect]))),
+                ("count", radios.filter(has_text=_exact(f"x{request.count}"))),
+            ]
+            if request.mode is Mode.R2V or request.reference_entities:
+                checks.append(("submode", radios.filter(has=_ligature(page, INGREDIENTS_LIGATURE))))
+            elif request.mode is Mode.I2V:
+                checks.append(("submode", radios.filter(has=_ligature(page, FRAMES_LIGATURE))))
+            if request.duration is not None:
+                duration = await self._duration_radio(pane, request.duration)
+                checks.append(("duration", duration))
+            if request.resolution is not None:
+                checks.append(
+                    (
+                        "resolution",
+                        radios.filter(has_text=re.compile(re.escape(request.resolution))),
+                    )
+                )
+            for axis, target in checks:
+                if (
+                    target is None
+                    or not await target.count()
+                    or (await target.first.get_attribute("aria-checked") != "true")
+                ):
+                    raise WireFormatError(f"video {axis} changed; not submitted")
+            button = pane.locator("button").filter(has=_ligature(page, "arrow_drop_down")).first
+            label = await button.text_content() or ""
+            effective = request.model or (I2V_DEFAULT_MODEL if request.mode is Mode.I2V else None)
+            matchers = (
+                [VIDEO_MODEL_MENU_MATCHERS[effective]]
+                if effective is not None
+                else list(VIDEO_MODEL_MENU_MATCHERS.values())
+            )
+            if not any(matcher.matches(label) for matcher in matchers):
+                raise WireFormatError("video model changed; not submitted")
+        except BaseException:
+            await self._close_pane(page, strict=False)
+            raise
+        await self._close_pane(page, strict=True)
+
     async def send_prompt(self, page: Page, prompt: str, *, append: bool = False) -> None:
         """Type the prompt. ``append=True`` keeps what is already in the composer — the
         mention chips an r2v run just attached — and restores the final paragraph caret
@@ -2716,6 +2777,25 @@ class MigratedComposer:
             nonlocal entity_submit
             body = _post_data(request)
             rid = _rpcid(str(request.url)) or _body_rpcid(body)
+            if IMAGE_SUBMIT_RPC in (_rpcid(str(request.url)), _body_rpcid(body)):
+                if not route_error.done():
+                    route_error.set_result(
+                        WireFormatError(
+                            "image submission blocked for a video request; not submitted",
+                            remediation_hint=(
+                                "Restore the video creation surface before sending again."
+                            ),
+                        )
+                    )
+                await route.abort()
+                return
+            if not expect_entity_ids:
+                on_request(request)
+                if route_error.done():
+                    await route.abort()
+                else:
+                    await route.continue_()
+                return
             # WuwhI saves prompt history, including R2V state, after a real submit.
             if (
                 rid == "WuwhI"
@@ -2926,9 +3006,8 @@ class MigratedComposer:
         # and refusing that is free while the generation is not. `on_request` returns
         # early for a t2v submit it has nothing to assert about.
         page.on("request", on_request)
-        if expect_entity_ids:
-            await page.route("**/data/batchexecute*", guard_entities)
         try:
+            await page.route("**/data/batchexecute*", guard_entities)
             submit = page.locator("button").filter(has=_ligature(page, "arrow_forward")).first
             if not await submit.count():
                 # A credit shortfall and a moved frontend look identical here: both are
@@ -3008,8 +3087,7 @@ class MigratedComposer:
                 submitted.exception()
             page.remove_listener("response", on_response)
             page.remove_listener("request", on_request)
-            if expect_entity_ids:
-                await page.unroute("**/data/batchexecute*", guard_entities)
+            await page.unroute("**/data/batchexecute*", guard_entities)
 
     async def _verify_submit_target(self, page: Page, submit: Locator) -> None:
         """Prove the submit button is visible and receives pointer events."""
@@ -3494,6 +3572,7 @@ async def run_video(
                     f"credits on a run that would ignore them"
                 ),
             )
+    await composer.verify_video_surface(page, request, pid)
     record = await composer.submit_and_observe(
         page,
         poll_timeout_s=poll_timeout_s,

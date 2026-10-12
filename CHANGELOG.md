@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- AutoFlow owner preview 0.83.0a11 blocks image-generation dispatches for video
+  requests before they leave the browser, revalidates the final video route and
+  selected settings, and permits one guarded settings-menu reopen when Flow
+  renders no overlay. This contains wrong-surface sends; the original UI
+  transition cause remains unproven.
+- Character JSON now includes verified `images.portrait` and `images.full_body`
+  workflow/media IDs on the native host. Unverified bindings remain null, and
+  signed URLs remain excluded. CLI and MCP return the same slot data.
+
 - AutoFlow owner preview 0.83.0a10 waits for a saved Character chip's entity
   identity after both immediate selection and detail/Add confirmation. A chip
   count alone no longer ends attachment while its ID is still empty. Missing

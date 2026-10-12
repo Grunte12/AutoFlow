@@ -674,6 +674,7 @@ def _char_to_dict(c: Character) -> dict[str, object]:
         "voice": c.voice,
         "personality": c.personality,
         "thumbnail_media_id": c.thumbnail_media_id,
+        "images": c.images,
     }
 
 

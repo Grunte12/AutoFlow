@@ -133,6 +133,7 @@ class Character:
     voice: str | None
     personality: str | None
     thumbnail_media_id: str | None
+    images: dict[str, dict[str, str] | None] | None = None
 
 
 # ---------------------------------------------------------------------------

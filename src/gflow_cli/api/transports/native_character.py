@@ -6,7 +6,7 @@ walk arbitrary UUID-looking values or retain prompts, URLs, or other wire data.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, NoReturn, cast
 from uuid import UUID
 
@@ -206,8 +206,23 @@ def parse_native_characters(payload: object, project_id: str) -> list[NativeChar
             bindings = _resolve_bindings(fields, workflow_index, requested_project)
         except WireFormatError:
             bindings = ()
-        result.append(NativeCharacterReadback(fields.character, bindings))
+        result.append(
+            NativeCharacterReadback(_with_image_slots(fields.character, payload), bindings)
+        )
     return result
+
+
+def _with_image_slots(character: Character, payload: object) -> Character:
+    # Reuse the upload/readback contract; never substitute the thumbnail for the body.
+    from gflow_cli.api.transports.native_character_update import (  # noqa: PLC0415
+        parse_character_image_state,
+    )
+
+    try:
+        state = parse_character_image_state(payload, character.project_id, character.entity_id)
+    except WireFormatError:
+        return character
+    return replace(character, images=state["images"])
 
 
 def parse_verified_native_character(
@@ -227,7 +242,7 @@ def parse_verified_native_character(
     bindings = _resolve_bindings(character, workflow_index, requested_project)
     if not bindings:
         _invalid("character has no verified workflow/media bindings")
-    return NativeCharacterReadback(character.character, bindings)
+    return NativeCharacterReadback(_with_image_slots(character.character, payload), bindings)
 
 
 __all__ = [

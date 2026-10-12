@@ -89,6 +89,23 @@ def test_native_character_parser_returns_only_stable_character_fields() -> None:
     assert "fixture-token" not in serialized
 
 
+def test_native_character_exposes_verified_portrait_and_body_slots() -> None:
+    payload = _payload(
+        entities=[_entity(workflow_ids=(WORKFLOW, OTHER_WORKFLOW))],
+        workflows=[_workflow(), _workflow(OTHER_WORKFLOW, media_id=OTHER_MEDIA)],
+    )
+    character = parse_native_characters(payload, PROJECT)[0].character
+    assert character.images == {
+        "portrait": {"workflow_id": WORKFLOW, "media_id": MEDIA},
+        "full_body": {"workflow_id": OTHER_WORKFLOW, "media_id": OTHER_MEDIA},
+    }
+
+
+def test_native_character_does_not_claim_unverified_image_slots() -> None:
+    character = parse_native_characters(_payload(workflows=[]), PROJECT)[0].character
+    assert character.images is None
+
+
 @pytest.mark.parametrize("personality", ["Warm and observant", "敏锐、温柔 🐈", ""])
 def test_native_character_parser_preserves_personality(personality: str) -> None:
     parsed = parse_native_characters(_payload(entities=[_entity(personality=personality)]), PROJECT)

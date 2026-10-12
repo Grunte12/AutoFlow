@@ -117,6 +117,20 @@ async def test_character_show_by_id() -> None:
     client.get_character.assert_awaited_once()
 
 
+def test_character_image_slots_are_preserved_in_mcp_and_cli_json() -> None:
+    from dataclasses import replace
+
+    from gflow_cli.cli_character import _char_to_dict
+
+    images = {
+        "portrait": {"workflow_id": "portrait-workflow", "media_id": "portrait-media"},
+        "full_body": {"workflow_id": "body-workflow", "media_id": "body-media"},
+    }
+    character = replace(_ALDOUS, images=images)
+    assert mcp_tools._character_to_dict(character)["images"] == images
+    assert _char_to_dict(character)["images"] == images
+
+
 @pytest.mark.usefixtures("_no_rate_limit")
 async def test_character_show_requires_exactly_one_selector() -> None:
     """Mirrors the CLI's UsageError: neither, or both, is a caller bug."""

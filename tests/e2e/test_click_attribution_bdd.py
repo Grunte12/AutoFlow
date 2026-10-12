@@ -203,6 +203,29 @@ def _clickable(world: dict[str, Any]) -> None:
     world["html"] = _page()
 
 
+@given("a Flow project page whose first settings reopen renders no overlay")
+def _first_reopen_unrendered(world: dict[str, Any]) -> None:
+    world["html"] = _page(
+        script="""
+      let clicks = 0;
+      document.querySelector('.settings-trigger-button').addEventListener('click', () => {
+        document.title = String(++clicks);
+        if (clicks === 1) return;
+        const pane = document.createElement('div');
+        pane.className = 'cdk-overlay-pane';
+        pane.innerHTML = "<div role='radiogroup'><div role='radio'>16:9</div></div>";
+        document.body.appendChild(pane);
+      });
+    """
+    )
+
+
+@then("the settings pane opens on exactly the second click")
+def _second_open(world: dict[str, Any]) -> None:
+    assert world["error"] is None
+    assert world["title"] == "2"
+
+
 @given("the agent-mode chip is pressed")
 def _chip_pressed(world: dict[str, Any]) -> None:
     world["html"] = _page(cover=_CDK_COVER, chip=True)

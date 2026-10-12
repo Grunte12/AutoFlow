@@ -1337,6 +1337,7 @@ def _character_to_dict(char: Any) -> dict[str, Any]:
         "voice": char.voice,
         "personality": char.personality,
         "thumbnail_media_id": char.thumbnail_media_id,
+        "images": getattr(char, "images", None),
     }
 
 

@@ -1322,6 +1322,85 @@ def test_matcher_excludes_the_lower_priority_suffix_by_default() -> None:
 # --- prompt + submit --------------------------------------------------------
 
 
+async def test_settings_reopen_recovers_one_unrendered_click() -> None:
+    composer = migrated_composer.MigratedComposer()
+    page = FakePage()
+    original = composer._click
+    clicks = 0
+
+    async def click(*args: Any, **kwargs: Any) -> None:
+        nonlocal clicks
+        clicks += 1
+        if clicks > 1:
+            await original(*args, **kwargs)
+
+    composer._click = click  # type: ignore[method-assign]
+    await composer._open_pane(page)
+    assert clicks == 2
+    assert page.dom.submit_clicked == 0
+
+
+@pytest.mark.parametrize("drift", [None, "edit", "mode", "model", "duration", "count"])
+async def test_final_video_settings_are_verified_without_resetting(drift: str | None) -> None:
+    from gflow_cli.api.transports.migrated_composer import MigratedComposer
+
+    page = FakePage()
+    request = GenerateVideoRequest(prompt="hello", duration=8, count=1)
+    await MigratedComposer().apply_video_settings(page, request)
+    if drift == "edit":
+        page.url += "/edit/a-workflow"
+    elif drift == "model":
+        page.dom.model_label = "Nano Banana 2.1"
+    elif drift:
+        radios = page.dom.groups[drift]
+        for radio in radios:
+            radio.checked = False
+        radios[0 if drift == "mode" else 1].checked = True
+    before = [(r.checked) for group in page.dom.groups.values() for r in group]
+    if drift:
+        with pytest.raises(WireFormatError, match="not submitted"):
+            await MigratedComposer().verify_video_surface(page, request, "p1")
+    else:
+        await MigratedComposer().verify_video_surface(page, request, "p1")
+    assert before == [r.checked for group in page.dom.groups.values() for r in group]
+    assert page.dom.submit_clicked == 0
+
+
+@pytest.mark.parametrize("url_rpc", ["ogiZ0b", None, "WuwhI"])
+@pytest.mark.parametrize("with_character", [False, True])
+async def test_video_dispatch_aborts_image_rpc_before_flow(
+    url_rpc: str | None,
+    with_character: bool,
+) -> None:
+    from types import SimpleNamespace
+    from urllib.parse import urlencode
+
+    page = FakePage()
+    page.dom.prompt = "hello"
+    handlers: list[Any] = []
+
+    async def register(_pattern: Any, handler: Any) -> None:
+        handlers.append(handler)
+
+    route = SimpleNamespace(continue_=AsyncMock(), abort=AsyncMock())
+    body = urlencode({"f.req": json.dumps([[["ogiZ0b", "[]", None, "generic"]]])})
+    url = _batch_url(url_rpc) if url_rpc else _batch_bare_url()
+    page.route = register  # type: ignore[method-assign]
+    page._fire_submit = lambda: asyncio.create_task(
+        handlers[0](route, SimpleNamespace(url=url, post_data=body))
+    )  # type: ignore[method-assign]
+    with pytest.raises(WireFormatError, match="image.*video"):
+        await migrated_composer.MigratedComposer().submit_and_observe(
+            page,
+            poll_timeout_s=0.1,
+            on_started=None,
+            project_id=None,
+            expect_entity_ids=("88888888-8888-4888-8888-888888888888",) if with_character else (),
+        )
+    route.abort.assert_awaited_once()
+    route.continue_.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "followup_rpc", [None, "MZZa6b", "stateEcho", "WuwhI", "WuwhISpoof", "WuwhIMixed"]
 )

@@ -1,5 +1,10 @@
 @e2e @e2e_auth
 Feature: A click that never lands says why
+  Scenario: One unrendered settings reopen is recovered without a submit
+    Given a Flow project page whose first settings reopen renders no overlay
+    When the driver opens the settings pane
+    Then the settings pane opens on exactly the second click
+
   # #776. On flow.google.com the settings trigger reads visible, the click expires after
   # 5000ms, and the run dies as a bare Playwright TimeoutError — exit 1, no locator, no
   # cause. migrated_composer.py:866-869 describes that exact failure in a comment, and
